@@ -82,6 +82,49 @@ git checkout main && git pull && git checkout -b <next-issue>-<slug>
 
 This authorization can be revoked by the user at any time.
 
+## Issue chain #15 → #16 → #17 → #18 (user-authorized self-activation)
+
+The user has approved a sequential four-issue batch and authorized the builder
+to advance it autonomously:
+
+- **#15** — Docker deployment (compose + standalone + persistent volume)
+- **#16** — Edit & regenerate saved sites (with version history)
+- **#17** — Logo image upload (validate + resize, local storage)
+- **#18** — More export formats (single HTML + static-host ZIP)
+
+These are independent features (each touches different files), but to keep the
+working tree and review queue sane the user wants them built **one at a time,
+in numeric order**. To enforce that, the builder is authorized to perform ONE
+normally-human action:
+
+> When the prior issue in the chain merges (verified `CLOSED` via
+> `gh issue view <N> --json state`), the next builder pass may add the
+> `agent-ready` label to the next chain issue.
+
+Procedure for the builder, run at the top of each pass after the auto-merge
+gate:
+
+1. Determine the chain head — the lowest-numbered of {15, 16, 17, 18} that is
+   still OPEN and not yet merged.
+2. If the chain head is already `agent-ready`: do nothing (it will be picked
+   up by the normal pick step).
+3. If the prior issue in the chain has just merged (verified via
+   `gh issue view <N> --json state` showing `CLOSED`), add `agent-ready` to
+   the chain head:
+   ```bash
+   gh issue edit <HEAD> --add-label "agent-ready"
+   ```
+4. Never add `agent-ready` to more than one chain issue at a time. Never add
+   it to an issue whose prerequisite is still OPEN.
+
+This authorization is **scoped to issues #15, #16, #17, and #18 only.** Any
+other issue — including future specs the user files, and the explicitly-parked
+multi-user/team-access work — still requires the human to manually add
+`agent-ready`. That gate is not changed.
+
+The user may revoke this chain authorization at any time by removing this
+section or by removing `agent-ready` from the queued issue.
+
 ## Working conventions
 
 - Branch naming: `<ISSUE-NUMBER>-<short-slug>` (e.g. `42-dark-mode`)
