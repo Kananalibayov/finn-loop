@@ -63,7 +63,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <main>
+    <main className="page">
       <header className="app-header">
         <h1>Projects</h1>
         <p>Browse, preview, delete, or re-download previously generated projects.</p>

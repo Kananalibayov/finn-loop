@@ -139,7 +139,7 @@ export default function HomePage() {
   }, [result, activePage]);
 
   return (
-    <div className="app-shell">
+    <div className="page">
       <header className="app-header">
         <h1>AI Website Generator</h1>
         <p>Enter business info. Get a 5-page website you can preview and download.</p>

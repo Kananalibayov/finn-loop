@@ -129,14 +129,14 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <main>
+      <main className="page">
         <div className="preview-empty">Loading settings…</div>
       </main>
     );
   }
 
   return (
-    <main>
+    <main className="page">
       <header className="app-header">
         <h1>Settings</h1>
         <p>Configure the WordPress instance this app delivers to.</p>

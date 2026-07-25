@@ -164,7 +164,7 @@ export default function ProjectPreviewPage() {
 
   if (status === "loading") {
     return (
-      <main>
+      <main className="page">
         <div className="preview-empty">Loading project…</div>
       </main>
     );
@@ -172,7 +172,7 @@ export default function ProjectPreviewPage() {
 
   if (status === "not-found") {
     return (
-      <main>
+      <main className="page">
         <section className="card">
           <h2>Project not found</h2>
           <p>This project may have been deleted.</p>
@@ -186,7 +186,7 @@ export default function ProjectPreviewPage() {
 
   if (status === "error") {
     return (
-      <main>
+      <main className="page">
         <section className="card">
           <div className="error">{error || "Could not load this project."}</div>
           <Link href="/projects" className="btn-secondary" style={{ display: "inline-block", marginTop: 12 }}>
@@ -198,7 +198,7 @@ export default function ProjectPreviewPage() {
   }
 
   return (
-    <main>
+    <main className="page">
       <div className="preview-toolbar">
         <Link href="/projects" className="btn-secondary">
           ← Back
