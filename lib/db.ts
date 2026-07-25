@@ -19,6 +19,8 @@ export interface ProjectRow {
   created_at: string;
   /** AC-1 (issue #16): groups a project with its regenerated versions. */
   site_group_id: string;
+  /** AC-4 (issue #30): JSON map of page keys → WP page IDs (null if not pushed). */
+  wp_page_ids: string | null;
 }
 
 /** AC-7: configurable via DATABASE_FILE env, default data/app.db. */
@@ -48,7 +50,8 @@ function db(): Database.Database {
       input_json TEXT NOT NULL,
       pages_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      site_group_id TEXT
+      site_group_id TEXT,
+      wp_page_ids TEXT
     );
   `);
   // AC-1 (issue #16): guarded ALTER for existing DBs that predate site_group_id.
@@ -58,6 +61,10 @@ function db(): Database.Database {
     conn.exec(`ALTER TABLE sites ADD COLUMN site_group_id TEXT;`);
     // Backfill existing rows: each forms a singleton group keyed by its own id.
     conn.exec(`UPDATE sites SET site_group_id = CAST(id AS TEXT) WHERE site_group_id IS NULL;`);
+  }
+  // AC-4 (issue #30): guarded ALTER for wp_page_ids (WP page IDs after push).
+  if (!cols.some((c) => c.name === "wp_page_ids")) {
+    conn.exec(`ALTER TABLE sites ADD COLUMN wp_page_ids TEXT;`);
   }
   // AC-1 (issue #24): wp_settings — single-row table for WP connection creds.
   // id is always 1 (enforced by the helpers). Password stored as plaintext
@@ -208,5 +215,17 @@ export function saveWpSettings(input: {
     updatedAt: now,
   });
   return getWpSettings()!;
+}
+
+// --- WP push tracking (issue #30) ---
+
+/** AC-4: store the WP page IDs (JSON map) for a project after pushing. */
+export function updateProjectWpPageIds(
+  projectId: number,
+  wpPageIds: Record<string, number>,
+): void {
+  db()
+    .prepare(`UPDATE sites SET wp_page_ids = ? WHERE id = ?`)
+    .run(JSON.stringify(wpPageIds), projectId);
 }
 

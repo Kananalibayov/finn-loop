@@ -34,6 +34,9 @@ export default function ProjectPreviewPage() {
   // AC-5 (issue #18): per-button busy states for the two new export formats.
   const [buildingHtml, setBuildingHtml] = useState(false);
   const [buildingStatic, setBuildingStatic] = useState(false);
+  // AC-6 (issue #30): push-to-WP state.
+  const [pushing, setPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<string | null>(null);
 
   // AC-4 (issue #16): edit & regenerate state.
   const [editing, setEditing] = useState(false);
@@ -138,6 +141,27 @@ export default function ProjectPreviewPage() {
     }
   }
 
+  // AC-6 (issue #30): push to WordPress.
+  async function handlePushWp() {
+    if (!id || !pages.length) return;
+    setPushing(true);
+    setPushResult(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${id}/push-wp`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { pushed?: number; error?: string };
+      if (!res.ok) {
+        throw new Error(data?.error || `Push failed (HTTP ${res.status}).`);
+      }
+      setPushResult(`✓ Pushed ${data.pushed || pages.length} pages as drafts to WordPress`);
+    } catch (e) {
+      setPushResult(null);
+      setError((e as Error).message);
+    } finally {
+      setPushing(false);
+    }
+  }
+
   if (status === "loading") {
     return (
       <main>
@@ -182,7 +206,7 @@ export default function ProjectPreviewPage() {
         <h2 style={{ margin: "0 0 0 12px" }}>
           {project?.business_name || "(untitled)"}
         </h2>
-        <div style={{ marginLeft: "auto" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button
             type="button"
             className="btn-secondary"
@@ -191,8 +215,22 @@ export default function ProjectPreviewPage() {
           >
             {editing ? "Close edit" : "Edit & regenerate"}
           </button>
+          {/* AC-6 (issue #30): push to WordPress. */}
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handlePushWp}
+            disabled={pushing || pages.length === 0}
+          >
+            {pushing ? "Pushing…" : "Push to WordPress"}
+          </button>
         </div>
       </div>
+
+      {/* AC-6 (issue #30): push result inline. */}
+      {pushResult && (
+        <div className="notice" style={{ marginBottom: 12 }}>{pushResult}</div>
+      )}
 
       {/* AC-4 (issue #16): edit form, pre-filled from the saved input. */}
       {editing && editInput && (
