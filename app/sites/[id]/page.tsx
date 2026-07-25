@@ -6,14 +6,15 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { GeneratedPage } from "@/lib/types";
+import type { BusinessInput, GeneratedPage } from "@/lib/types";
 
 type FullSite = {
   id: number;
   business_name: string;
   pages_json: string;
+  input_json: string;
   created_at: string;
 };
 
@@ -22,6 +23,7 @@ type Status = "loading" | "ready" | "not-found" | "error";
 export default function SitePreviewPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
+  const router = useRouter();
 
   const [site, setSite] = useState<FullSite | null>(null);
   const [pages, setPages] = useState<GeneratedPage[]>([]);
@@ -29,6 +31,15 @@ export default function SitePreviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [activePage, setActivePage] = useState(0);
   const [zipping, setZipping] = useState(false);
+
+  // AC-4 (issue #16): edit & regenerate state.
+  const [editing, setEditing] = useState(false);
+  const [editInput, setEditInput] = useState<BusinessInput | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+
+  function setEditField<K extends keyof BusinessInput>(key: K, value: BusinessInput[K]) {
+    setEditInput((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -47,6 +58,8 @@ export default function SitePreviewPage() {
         if (cancelled) return;
         setSite(data);
         setPages(parsed);
+        // AC-4 (issue #16): pre-fill the edit form from the saved input.
+        setEditInput(safeParseInput(data.input_json));
         setStatus("ready");
       } catch (e) {
         if (!cancelled) {
@@ -88,6 +101,32 @@ export default function SitePreviewPage() {
       setError((e as Error).message);
     } finally {
       setZipping(false);
+    }
+  }
+
+  // AC-5, AC-6 (issue #16): submit the edit form → regenerate → navigate.
+  async function handleRegenerate() {
+    if (!editInput || !id) return;
+    if (!editInput.businessName.trim()) return;
+    setRegenerating(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sites/${id}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: editInput }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data?.error || `Regeneration failed (HTTP ${res.status}).`);
+      }
+      const data = (await res.json()) as { id: number };
+      // Navigate to the freshly-generated version.
+      router.push(`/sites/${data.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRegenerating(false);
     }
   }
 
@@ -135,7 +174,90 @@ export default function SitePreviewPage() {
         <h2 style={{ margin: "0 0 0 12px" }}>
           {site?.business_name || "(untitled)"}
         </h2>
+        <div style={{ marginLeft: "auto" }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setEditing((v) => !v)}
+            disabled={regenerating}
+          >
+            {editing ? "Close edit" : "Edit & regenerate"}
+          </button>
+        </div>
       </div>
+
+      {/* AC-4 (issue #16): edit form, pre-filled from the saved input. */}
+      {editing && editInput && (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <h2>Edit input</h2>
+          <p className="login-sub" style={{ marginBottom: 12 }}>
+            Changing these fields re-runs generation with the new input. The
+            current version is kept as history (a new row is created).
+          </p>
+          <label htmlFor="bn">Business name *</label>
+          <input
+            id="bn"
+            type="text"
+            value={editInput.businessName}
+            onChange={(e) => setEditField("businessName", e.target.value)}
+          />
+          <label htmlFor="tg">Tagline</label>
+          <input
+            id="tg"
+            type="text"
+            value={editInput.tagline}
+            onChange={(e) => setEditField("tagline", e.target.value)}
+          />
+          <label htmlFor="ds">Description</label>
+          <textarea
+            id="ds"
+            value={editInput.description}
+            onChange={(e) => setEditField("description", e.target.value)}
+          />
+          <label htmlFor="sv">
+            Services <span className="hint">(one per line)</span>
+          </label>
+          <textarea
+            id="sv"
+            value={editInput.services.join("\n")}
+            onChange={(e) =>
+              setEditField(
+                "services",
+                e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+              )
+            }
+          />
+          <label htmlFor="ph">Phone</label>
+          <input
+            id="ph"
+            type="tel"
+            value={editInput.phone}
+            onChange={(e) => setEditField("phone", e.target.value)}
+          />
+          <label htmlFor="em">Email</label>
+          <input
+            id="em"
+            type="email"
+            value={editInput.email}
+            onChange={(e) => setEditField("email", e.target.value)}
+          />
+          <label htmlFor="ad">Address</label>
+          <textarea
+            id="ad"
+            value={editInput.address}
+            onChange={(e) => setEditField("address", e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleRegenerate}
+            disabled={regenerating || !editInput.businessName.trim()}
+          >
+            {regenerating ? "Regenerating…" : "Regenerate site"}
+          </button>
+          {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}
+        </section>
+      )}
 
       <section className="card">
         <div className="preview-toolbar">
@@ -181,5 +303,26 @@ function safeParsePages(raw: string): GeneratedPage[] {
     return parsed as GeneratedPage[];
   } catch {
     return [];
+  }
+}
+
+/** Parse input_json defensively into a BusinessInput shape, with sane defaults. */
+function safeParseInput(raw: string): BusinessInput {
+  const fallback: BusinessInput = {
+    businessName: "",
+    tagline: "",
+    description: "",
+    services: [],
+    phone: "",
+    email: "",
+    address: "",
+    logoUrl: "",
+    brandColors: "",
+  };
+  try {
+    const parsed = JSON.parse(raw) as Partial<BusinessInput>;
+    return { ...fallback, ...parsed };
+  } catch {
+    return fallback;
   }
 }
