@@ -79,8 +79,6 @@ function db(): Database.Database {
     );
   `);
   // AC-1 (issue #32): wp_connections — multi-row table for per-client WP sites.
-  // Replaces the single-row wp_settings approach for multi-client support.
-  // pairing_code is nullable (used by the companion plugin flow later).
   conn.exec(`
     CREATE TABLE IF NOT EXISTS wp_connections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,6 +88,18 @@ function db(): Database.Database {
       app_password TEXT NOT NULL,
       pairing_code TEXT,
       created_at TEXT NOT NULL
+    );
+  `);
+  // AC-1 (issue #34): wp_pairing_codes — one-time codes for plugin auto-connect.
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS wp_pairing_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      label TEXT NOT NULL,
+      used INTEGER DEFAULT 0,
+      connection_id INTEGER,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
     );
   `);
   dbInstance = conn;
@@ -243,6 +253,92 @@ export function updateProjectWpPageIds(
     .run(JSON.stringify(wpPageIds), projectId);
 }
 
+// --- WP pairing codes (issue #34: plugin auto-connect) ---
+
+/** AC-2: generate a random pairing code in format XXXX-XXXX-XXXX. */
+function generatePairingCodeString(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no confusing chars (0/O, 1/I)
+  const segment = () =>
+    Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return `${segment()}-${segment()}-${segment()}`;
+}
+
+/** Row shape for wp_pairing_codes. */
+export interface PairingCodeRow {
+  id: number;
+  code: string;
+  label: string;
+  used: number;
+  connection_id: number | null;
+  created_at: string;
+  expires_at: string;
+}
+
+/** AC-2: create a new pairing code. Returns the row (with the code). */
+export function createPairingCode(label: string): PairingCodeRow {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
+  const code = generatePairingCodeString();
+  const info = db()
+    .prepare(
+      `INSERT INTO wp_pairing_codes (code, label, used, created_at, expires_at)
+       VALUES (@code, @label, 0, @createdAt, @expiresAt)`,
+    )
+    .run({
+      code,
+      label,
+      createdAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    });
+  return getPairingCodeById(Number(info.lastInsertRowid))!;
+}
+
+/** AC-2: get a pairing code by ID. */
+export function getPairingCodeById(id: number): PairingCodeRow | null {
+  const row = db().prepare(`SELECT * FROM wp_pairing_codes WHERE id = ?`).get(id);
+  return (row as PairingCodeRow | undefined) ?? null;
+}
+
+/** AC-2: get a pairing code by the code string. */
+export function getPairingCode(code: string): PairingCodeRow | null {
+  const row = db()
+    .prepare(`SELECT * FROM wp_pairing_codes WHERE code = ?`)
+    .get(code);
+  return (row as PairingCodeRow | undefined) ?? null;
+}
+
+/** AC-2: list all pairing codes (for the UI). */
+export function listPairingCodes(): PairingCodeRow[] {
+  return db()
+    .prepare(`SELECT * FROM wp_pairing_codes ORDER BY id DESC`)
+    .all() as PairingCodeRow[];
+}
+
+/** AC-2: consume a pairing code (mark as used + link to connection).
+ *  Returns the row if valid (unused + not expired), null otherwise. */
+export function consumePairingCode(code: string): PairingCodeRow | null {
+  // Race-free consume: single conditional UPDATE + check row count.
+  // SQLite serializes writes under one connection, so two concurrent requests
+  // with the same code can't both pass this — one UPDATE succeeds (changes=1),
+  // the other finds used=1 already and gets changes=0.
+  const info = db()
+    .prepare(
+      `UPDATE wp_pairing_codes
+       SET used = 1
+       WHERE code = ? AND used = 0 AND expires_at > ?`,
+    )
+    .run(code, new Date().toISOString());
+  if (info.changes === 0) return null; // already used, expired, or nonexistent
+  return getPairingCode(code);
+}
+
+/** AC-4 step 4: link a pairing code to a connection after registration. */
+export function linkPairingCode(code: string, connectionId: number): void {
+  db()
+    .prepare(`UPDATE wp_pairing_codes SET connection_id = ? WHERE code = ?`)
+    .run(connectionId, code);
+}
+
 // --- WP connections (issue #32: multi-client support) ---
 
 /** Row shape for the wp_connections table. */
@@ -256,14 +352,14 @@ export interface WpConnectionRow {
   created_at: string;
 }
 
-/** AC-2: list all WP connections, newest-first. */
+/** AC-2 (#32): list all WP connections, newest-first. */
 export function listWpConnections(): WpConnectionRow[] {
   return db()
     .prepare(`SELECT * FROM wp_connections ORDER BY id DESC`)
     .all() as WpConnectionRow[];
 }
 
-/** AC-2: get one WP connection by ID, or null. */
+/** AC-2 (#32): get one WP connection by ID, or null. */
 export function getWpConnection(id: number): WpConnectionRow | null {
   const row = db()
     .prepare(`SELECT * FROM wp_connections WHERE id = ?`)
@@ -271,7 +367,7 @@ export function getWpConnection(id: number): WpConnectionRow | null {
   return (row as WpConnectionRow | undefined) ?? null;
 }
 
-/** AC-2: add a new WP connection. Returns the stored row. */
+/** AC-2 (#32): add a new WP connection. Returns the stored row. */
 export function addWpConnection(input: {
   label: string;
   apiUrl: string;
@@ -294,27 +390,7 @@ export function addWpConnection(input: {
   return getWpConnection(Number(info.lastInsertRowid))!;
 }
 
-/** AC-2: update an existing WP connection's fields. */
-export function updateWpConnection(
-  id: number,
-  fields: {
-    label?: string;
-    apiUrl?: string;
-    username?: string;
-    appPassword?: string;
-  },
-): void {
-  const sets: string[] = [];
-  const values: Record<string, unknown> = { id };
-  if (fields.label !== undefined) { sets.push("label = @label"); values.label = fields.label; }
-  if (fields.apiUrl !== undefined) { sets.push("api_url = @apiUrl"); values.apiUrl = fields.apiUrl; }
-  if (fields.username !== undefined) { sets.push("username = @username"); values.username = fields.username; }
-  if (fields.appPassword !== undefined) { sets.push("app_password = @appPassword"); values.appPassword = fields.appPassword; }
-  if (sets.length === 0) return;
-  db().prepare(`UPDATE wp_connections SET ${sets.join(", ")} WHERE id = @id`).run(values);
-}
-
-/** AC-2: delete a WP connection. */
+/** AC-2 (#32): delete a WP connection. */
 export function deleteWpConnection(id: number): boolean {
   const info = db().prepare(`DELETE FROM wp_connections WHERE id = ?`).run(id);
   return info.changes > 0;
