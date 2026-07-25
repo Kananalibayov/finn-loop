@@ -7,6 +7,7 @@ import { getOpenAI, GENERATION_MODEL } from "@/lib/openai";
 import { buildPrompt, cleanHtml } from "@/lib/prompts";
 import { getTheme } from "@/lib/themes";
 import { ALL_PAGES, GenerateRequest, GenerateResponse, GeneratedPage, PageKey } from "@/lib/types";
+import { insertSite } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -90,6 +91,23 @@ export async function POST(req: NextRequest) {
         colors: !input.brandColors,
       },
     };
+
+    // AC-3 (issue #4): persist the generated site after a successful build.
+    // Best-effort — a persistence failure must not fail an otherwise-successful
+    // generation. The presence of `id` in the response is the save signal.
+    try {
+      response.id = insertSite({
+        businessName: input.businessName,
+        tagline: input.tagline,
+        themeId: theme.id,
+        mode,
+        inputJson: JSON.stringify(input),
+        pagesJson: JSON.stringify(out),
+      });
+    } catch (persistErr) {
+      console.error("[generate] DB save failed:", (persistErr as Error).message);
+    }
+
     return NextResponse.json(response);
   } catch (e) {
     const msg = (e as Error).message || "Generation failed.";
