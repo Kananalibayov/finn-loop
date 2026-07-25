@@ -82,6 +82,46 @@ git checkout main && git pull && git checkout -b <next-issue>-<slug>
 
 This authorization can be revoked by the user at any time.
 
+## Issue chain #8 → #9 → #10 (user-authorized self-activation)
+
+The user has approved a sequential three-issue chain for the dashboard work
+and authorized the builder to advance it autonomously:
+
+- **#8** — App shell + top navigation
+- **#9** — Dashboard list + site preview page (depends on #8 merged)
+- **#10** — Soft-delete with undo toast (depends on #9 merged)
+
+Each issue's acceptance criteria assume the prior issue's code is already on
+`main`. Building them out of order produces broken PRs. To enforce the chain,
+the builder is authorized to perform ONE normally-human action:
+
+> When issue #8 merges, the next builder pass may add the `agent-ready` label
+> to issue #9. When issue #9 merges, the next builder pass may add the
+> `agent-ready` label to issue #10.
+
+Procedure for the builder, run at the top of each pass after the auto-merge
+gate:
+
+1. Determine the chain head — the lowest-numbered of {8, 9, 10} that is
+   still OPEN and not yet merged.
+2. If the chain head is already `agent-ready`: do nothing (it will be picked
+   up by the normal pick step).
+3. If the prior issue in the chain has just merged (verified via
+   `gh issue view <N> --json state` showing `CLOSED`), add `agent-ready` to
+   the chain head:
+   ```bash
+   gh issue edit <HEAD> --add-label "agent-ready"
+   ```
+4. Never add `agent-ready` to more than one chain issue at a time. Never add
+   it to an issue whose prerequisite is still OPEN.
+
+This authorization is **scoped to issues #8, #9, and #10 only.** Any other
+issue — including future specs the user files — still requires the human to
+manually add `agent-ready`. That gate is not changed.
+
+The user may revoke this chain authorization at any time by removing this
+section or by removing `agent-ready` from the queued issue.
+
 ## Working conventions
 
 - Branch naming: `<ISSUE-NUMBER>-<short-slug>` (e.g. `42-dark-mode`)
