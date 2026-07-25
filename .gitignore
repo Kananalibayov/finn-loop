@@ -35,3 +35,8 @@ next-env.d.ts
 
 # AC-7 (issue #4): local SQLite database + data dir — runtime only, never commit.
 /data
+
+# Builder scratch files (PR/issue body drafts written to disk to avoid
+# shell-escaping; must never be committed).
+.pr-*.md
+.issue-*.md
