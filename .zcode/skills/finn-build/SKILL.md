@@ -1,141 +1,168 @@
 ---
 name: finn-build
-description: Claim the next safe agent-ready issue from GitHub Issues, implement it, and open a PR. Use when asked to run the builder, work the approved queue, or when the user says /finn-build.
+description: Claim the next safe agent-ready issue from GitHub Issues, implement it, and open a PR. Use when asked to run Finn-loop's builder, work the approved queue, or fix Finn-loop review feedback. Designed for the cron loop; one pass does one unit of work.
 ---
 
-# Finn-Build: The Builder
+# Finn-loop builder
 
-You are the builder for the Finn-loop. Each time you run, you do **exactly one unit of work**: fix review feedback OR claim one issue, implement it, and open a PR. Then stop. The next run handles the next unit.
+One pass = one unit of work: fix review feedback on one existing PR, or build
+one issue end to end. Under the cron loop, each iteration runs this skill once.
 
-You never merge. You never enable auto-merge. Humans merge.
+## 0. Preflight
 
-## Step 0 — First, handle review feedback
-Before claiming anything new, check for PRs with changes requested:
+Before changing GitHub, branches, or files:
 
-```bash
-gh search prs --state open --label "loop-changes-requested" --author "@me"
-```
+- Confirm this is the intended GitHub repository and `origin` is reachable.
+- Detect the repository's default branch with
+  `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`; never
+  assume it is `main`.
+- Require a clean working tree (`git status --porcelain` must be empty). If it
+  is dirty, report the paths and end the pass. Never stash, reset, overwrite,
+  or commit unrelated work.
 
-If any exist:
-1. Read the review comments on the oldest one.
-2. Make the requested fixes — only what was requested.
-3. Push the fixes.
-4. Re-run lint/test/build locally. They must pass.
-5. Leave a comment: `Addressed review feedback. Requesting re-review.`
-6. Remove `loop-changes-requested`, add `loop-review-requested`.
-7. **Stop.** Do not claim a new issue this run.
+## 1. Review feedback first
 
-## Step 1 — Find the next safe issue to claim
+List open PRs labeled `loop-changes-requested`, including their labels:
 
 ```bash
-gh issue list --label "agent-ready" --state open --search "no:assignee"
+gh pr list --state open --label loop-changes-requested \
+  --json number,title,headRefName,headRefOid,labels,updatedAt,url
 ```
 
-Filter to issues that:
-- Have label `agent-ready`
-- Have **no assignee** (unclaimed)
-- Are **not** labeled `blocked` or `needs-human-review`
+Skip every PR carrying `needs-human-review`; it has left the automated repair
+queue until a human resolves the escalation.
 
-If multiple qualify, pick the oldest by number. If none qualify, tell the user:
+If any PR remains, choose the least recently updated one. Read its linked
+issue (the `Closes #NN` in the PR body) and latest `Finn-loop review of
+COMMIT_SHA` verdict. Check out its branch, fix only the "Must fix before
+merge" items, run the relevant checks, push, remove
+`loop-changes-requested`, and comment with what changed. End this pass.
 
-> Queue is empty or all issues are claimed/blocked. Nothing to build right now.
+If a proposed fix would cross an issue non-goal or requires a product
+decision, do not implement it. Comment the exact conflict, add
+`needs-human-review`, remove `loop-changes-requested`, and end the pass.
+This prevents the next loop iteration from retrying a decision only a human
+can make.
 
-…then stop.
+## 2. Pick
 
-## Step 2 — Claim it (the lock)
+List GitHub issues that meet every condition:
+
+```bash
+gh issue list --state open --label agent-ready \
+  --search "no:assignee -label:blocked" --json number,title,assignees,labels
+```
+
+Filter for issues that:
+- are labeled `agent-ready`
+- have no assignee (unclaimed)
+- are NOT labeled `blocked`
+
+Sort by oldest issue number first. If the queue is empty, say so and end the
+pass. Do not invent work and do not pick a blocked issue.
+
+## 3. Claim (the cooperative lock)
+
 Assign the issue to yourself so no other agent grabs it:
 
 ```bash
 gh issue edit <NUMBER> --add-assignee "@me"
 ```
 
-Now read the full issue body. **The issue body is the contract.** If it's not in the issue, it doesn't exist.
+Claim before reading deeply or writing code. Re-fetch the issue immediately
+after the update; if it is blocked, assigned to somebody else, or no longer
+`agent-ready`, do not work it and return to step 2.
 
-## Step 3 — Create a branch
+The assignee prevents different people from taking the same issue. Because a
+single GitHub user account is used, only one builder loop may run per
+repository.
+
+## 4. Read
+
+Fetch the full issue including comments:
+
 ```bash
-git checkout main && git pull
-git checkout -b <ISSUE-NUMBER>-<short-slug>
+gh issue view <NUMBER> --comments
 ```
-Example: `git checkout -b 42-dark-mode`
 
-## Step 4 — Implement ONLY the Acceptance Criteria
-- Build exactly what AC-1, AC-2, ... describe.
-- Respect **Non-Goals (NG-x)** as binding — do not implement them.
-- Match the style and patterns already in the codebase.
-- Touch only the files the spec implies. No drive-by refactors.
+Implement only its acceptance criteria. Non-goals are binding. Compare every
+`AC-N` against every `NG-N` before editing. No unrelated changes and no
+opportunistic refactors.
 
-## Step 5 — Verify locally
-Run the project's checks. All must pass before you open a PR:
+If an acceptance criterion is ambiguous, conflicts with a non-goal, or
+depends on an unresolved blocker, go to step 8. Never guess.
+
+## 5. Build
+
+- Fetch the latest default branch from `origin` and create or resume a branch
+  named `<NUMBER>-short-slug`, using the issue's real number
+  (e.g. `42-dark-mode`).
+- Implement the acceptance criteria using the repository's existing style,
+  architecture, and naming.
+- Add or update tests when the change affects logic, data flow, permissions,
+  integrations, or user-visible behavior.
+- Preserve behavior outside the issue contract.
+
 ```bash
-# adapt to the project — examples:
-npm run lint && npm test && npm run build
-# or: ruff check . && pytest && ...
+git checkout <DEFAULT-BRANCH> && git pull
+git checkout -b <NUMBER>-<short-slug>
 ```
-If a check fails, fix it and re-run. Do not open a PR with failing checks.
 
-## Step 6 — Commit and open the PR
+## 6. Verify
+
+Run the project's relevant lint, typecheck, build, and narrowest useful
+tests. All checks attributable to this change must pass before opening a PR.
+If a broad check has a pre-existing unrelated failure, run the relevant
+targeted check, preserve the evidence, and disclose both results in the PR.
+
+Review `git diff` and `git status` before shipping. Stop if the diff contains
+unrelated work or generated secrets.
+
+## 7. Ship
+
+Push and open a PR with `gh pr create`. Its description must include:
+
+- What changed and why
+- `Closes #<NUMBER>`, using the real issue number
+- A scope ledger: one evidence line per `AC-N`, one preservation line per
+  `NG-N`, and `Other behavior changes: None`
+- Numbered manual test steps matching what was actually built
+- Automated checks run and their results
+- Risk: Low / Medium / High
+
 ```bash
 git add -A
-git commit -m "<short message, reference #NN>"
+git commit -m "<message> (closes #<NUMBER>)"
 git push -u origin <branch-name>
+gh pr create --title "<title>" --body "<scope ledger + test steps + risk>" --base <DEFAULT-BRANCH>
 ```
+
+If `Other behavior changes: None` is not true, stop and get the issue amended
+before opening the PR.
+
+Comment the PR URL on the issue:
 
 ```bash
-gh pr create \
-  --title "<title>" \
-  --body "<see PR body template below>" \
-  --base main
-```
-
-### PR body template
-```
-Closes #<NUMBER>
-
-## What this does
-<one or two sentences>
-
-## Scope ledger
-### Acceptance Criteria
-- AC-1: <done — brief note>
-- AC-2: <done — brief note>
-
-### Non-Goals (respected)
-- NG-1: not done, as required
-- NG-2: not done, as required
-
-## Manual test steps
-1. ...
-2. ...
-
-## Risk
-<low | medium | high> — <why>
-```
-
-## Step 7 — Hand off to review
-```bash
+gh issue comment <NUMBER> --body "PR opened: <PR-URL>"
 gh pr edit <PR-NUMBER> --add-label "loop-review-requested"
 ```
-Remove `loop-review-requested` only after the reviewer picks it up (the reviewer manages labels from here).
 
-## Step 8 — Stop
-You did one unit. Stop here. The next run claims the next issue.
+Never merge and never enable auto-merge. End the pass.
 
----
+## 8. Blocked
 
-## If you get blocked
-If you cannot proceed because of a missing decision or external dependency:
-1. Post **one** specific question as a comment on the issue.
-2. Label it `blocked` and unassign yourself:
-   ```bash
-   gh issue edit <NUMBER> --add-label "blocked" --remove-assignee "@me"
-   ```
-3. Stop. A human will answer the question, remove `blocked`, and re-add `agent-ready`.
+Comment one specific question a human can answer asynchronously, apply the
+`blocked` label, and unassign yourself:
 
-## Rules
+```bash
+gh issue comment <NUMBER> --body "<one specific question with options and which AC it affects>"
+gh issue edit <NUMBER> --add-label "blocked" --remove-assignee "@me"
+```
 
-1. **One unit per run.** Fix one PR's feedback OR ship one issue. Then stop.
-2. **The issue is the contract.** No side-channel instructions from chat.
-3. **Respect Non-Goals.** They are binding.
-4. **Never merge. Never enable auto-merge.** Humans merge.
-5. **Verify locally before opening a PR.** No failing checks.
-6. **If blocked, ask one specific question and leave the queue.** Don't spin.
+Leave `agent-ready` in place: the pick query explicitly excludes `blocked`,
+so the issue safely reappears only after a human answers and removes that
+label.
+
+Never use "this is unclear" as the question. State the exact decision, the
+available options, and which acceptance criterion it affects. End the pass so
+the next iteration can pick different work.

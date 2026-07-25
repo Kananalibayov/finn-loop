@@ -1,13 +1,18 @@
 # Finn-Loop on ZCode
 
-A 3-skill AI software factory adapted from [Alex Finn's loop](https://youtu.be/FRGLToHAtgc), running on **ZCode** with **GitHub Issues** instead of Linear.
+A 3-skill AI software factory adapted from
+[Alex Finn's "Prompting is dead" video](https://youtu.be/FRGLToHAtgc)
+(repo: [finna/Finn-loop](https://github.com/finna/Finn-loop)),
+running on **ZCode** with **GitHub Issues** instead of Linear, and **ZCode cron**
+instead of Claude Code's `/loop`.
 
-You spend ~15 min in the morning giving ideas. AI builds + tests + reviews all day. You click merge at night.
+You spend ~15 min in the morning giving ideas. AI builds + reviews all day while
+ZCode is open. You click merge at night.
 
 ```
 You (idea) → /finn-spec → GitHub Issue → you label it agent-ready
                                                 ↓
-/finn-build picks it up → codes → opens PR → /finn-review tests → verdict
+finn-build picks it up → codes it → opens PR → finn-review tests → verdict
                                                 ↓
                                 loop-approved ✅ → you merge
 ```
@@ -29,52 +34,53 @@ ZCodeProject/
 
 ---
 
-## One-time setup (do this first)
+## Setup status (already done)
 
-You only do these steps once.
+- ✅ GitHub CLI (`gh`) installed at `C:\Program Files\GitHub CLI\gh.exe`
+- ✅ Logged in as `Kananalibayov`
+- ✅ Repo created: `Kananalibayov/finn-loop` (private)
+- ✅ All 7 labels created
+- ✅ Cron automation "Finn-loop builder (every 5 min)" registered
+- ⬜ Cron automation "Finn-loop reviewer (every 5 min)" — see below
 
-### 1. Install the GitHub CLI (`gh`)
-The skills use `gh` to talk to GitHub. Check if you have it:
-```bash
-gh --version
-```
-If not, install it: https://cli.apache.org/packages/gh  (or `winget install GitHub.cli` on Windows)
+---
 
-### 2. Log in to GitHub
-```bash
-gh auth login
-```
-Follow the prompts. Pick GitHub.com → HTTPS → login in browser.
+## ⚠️ The cron limitation you need to understand
 
-### 3. Create a GitHub repo for your project
-```bash
-cd /c/Users/newke/ZCodeProject
-gh repo create my-finn-project --private --source=. --remote=origin --push
-```
-(Replace `my-finn-project` with whatever name you want. `--private` keeps it secret.)
+Alex's video shows him running `/loop 5 min /him-build` in two **always-on**
+Claude Code chats. ZCode's cron is different:
 
-### 4. Initialize git (if not already)
-```bash
-git init
-git add -A
-git commit -m "Initial commit: Finn-loop setup"
-git branch -M main
-```
+| | Alex's `/loop` (Claude Code) | ZCode cron |
+|---|---|---|
+| Runs while app closed? | ✅ Yes | ❌ No — only while ZCode is open |
+| 24/7 background? | ✅ Yes | ❌ No |
+| Schedule | `5 min` | `*/5 * * * *` (every 5 min) |
 
-### 5. Create the labels the loop uses
-Run this once to create all the labels:
-```bash
-gh label create finn-spec               --color FBCA04 --description "Issue filed by finn-spec"
-gh label create agent-ready             --color 0E8A16 --description "Spec approved by human; ready to build"
-gh label create blocked                 --color B60205 --description "Builder needs a human decision"
-gh label create loop-review-requested   --color 1D76DB --description "PR waiting for finn-review"
-gh label create loop-changes-requested  --color D93F0B --description "Reviewer found must-fix issues"
-gh label create loop-approved           --color 0E8A16 --description "Reviewer verified; ready for human merge"
-gh label create needs-human-review      --color 5319E7 --description "Reviewer escalated to human"
-```
+**So: ZCode's cron is "autonomous while you work", not "24/7 unattended".** If
+you want true 24/7, that needs an external orchestrator (a script on a server,
+GitHub Actions, or a small scheduled task that launches `zcode` headlessly) —
+beyond built-in ZCode for now.
 
-### 6. (Optional) Install ZCode if you haven't
-The skills live in `.zcode/skills/`. ZCode auto-discovers them. Restart ZCode after first setup so it picks them up.
+---
+
+## How to register the reviewer cron
+
+The builder cron is already registered in this session. ZCode does not allow a
+scheduled task to create another scheduled task from within itself, so register
+the reviewer cron yourself:
+
+1. **Open a NEW ZCode session** (not this one).
+2. Type (or say):
+   > Schedule an automation titled "Finn-loop reviewer (every 5 min)" that runs
+   > every 5 minutes. Prompt: "Run the /finn-review skill now. Work from the
+   > repo at C:\Users\newke\ZCodeProject. Review exactly one PR that needs
+   > review, post the three-group verdict comment, and set labels. Never merge,
+   > never push, never use a formal GitHub review. Report briefly what you did
+   > or if nothing needed review."
+3. ZCode will create the automation and confirm.
+
+To list or delete automations, in any session say *"list my automations"* or
+*"delete the Finn-loop builder automation"*.
 
 ---
 
@@ -98,57 +104,58 @@ gh issue edit <NUMBER> --add-label agent-ready
 ```
 *(Adding `agent-ready` is the human approval gate. The AI never adds it itself.)*
 
-### All day (AI): The loop runs
-The build and review loops process the queue. Since ZCode doesn't have a built-in `/loop` command like Claude Code, run them yourself on a schedule:
+### All day (AI, while ZCode is open): The cron loops run
+- The builder cron claims `agent-ready` issues and opens PRs.
+- The reviewer cron reviews PRs and labels them `loop-approved` or
+  `loop-changes-requested`.
 
-**Option A — Manual (simplest):** Every now and then, type in ZCode:
+You can watch it work in your repo:
+```bash
+gh issue list                       # see the queue
+gh pr list                          # see open PRs
+gh pr list --label loop-approved    # see what's ready to merge
 ```
-/finn-build
-```
-…and in another session:
-```
-/finn-review
-```
-
-**Option B — Scheduled (more automated):** Use ZCode's cron feature to fire them every 5 minutes while you work. Ask ZCode: *"Schedule /finn-build and /finn-review to run every 5 minutes."*
 
 ### Night (~5 min): Merge
-Review anything labeled `loop-approved` and click merge in GitHub:
+Merge anything labeled `loop-approved` that you're happy with:
 ```bash
-gh pr list --label loop-approved
+gh pr merge <PR-NUMBER> --squash --delete-branch
 ```
-Then merge the ones you're happy with.
 
 ---
 
 ## What each skill does
 
-### `/finn-spec` — The Interviewer
+### `/finn-spec` — The Interviewer (interactive, you must be present)
 Turns your vague idea into a bulletproof spec.
 - Researches your codebase first (doesn't ask dumb questions)
-- Interviews you in rounds until it fully understands
-- Files a GitHub Issue with AC-1, AC-2... (criteria) and NG-1, NG-2... (non-goals)
+- Interviews you in rounds until the confidence test passes: *"Could two
+  different engineers read this spec and ship the same observable behavior?"*
+- Files a GitHub Issue with `AC-1, AC-2...` (criteria) and `NG-1, NG-2...`
+  (non-goals)
 - **Never** adds `agent-ready` itself — that's your job
 
-### `/finn-build` — The Builder
-Each run does **one thing**:
-1. First checks for PRs with `loop-changes-requested` and fixes them
-2. Otherwise claims the oldest `agent-ready` + unassigned issue
-3. Creates a branch `NN-short-name`
-4. Implements ONLY the acceptance criteria
-5. Runs lint/test/build locally — must pass
-6. Opens a PR with `Closes #NN`, a scope ledger, test steps, risk level
-7. Labels it `loop-review-requested`
-8. **Never merges**
+### `/finn-build` — The Builder (runs on cron)
+Each run does **exactly one unit of work**:
+1. **Preflight**: confirms clean working tree (never stashes/resets your work)
+2. First checks for PRs with `loop-changes-requested` and fixes them
+3. Otherwise claims the oldest `agent-ready` + unassigned + not-blocked issue
+4. Creates a branch `NN-short-name`
+5. Implements ONLY the acceptance criteria (non-goals are binding)
+6. Runs lint/test/build locally — must pass
+7. Opens a PR with `Closes #NN`, a scope ledger, test steps, risk level
+8. Labels it `loop-review-requested`
+9. **Never merges, never enables auto-merge**
 
-### `/finn-review` — The Reviewer
-Each run reviews **one PR**:
-1. Finds the oldest PR with `loop-review-requested`
+### `/finn-review` — The Reviewer (runs on cron)
+Each run reviews **exactly one PR**:
+1. Finds the oldest PR with `loop-review-requested` (skips already-reviewed SHAs)
 2. Loads the linked issue (the contract)
-3. Checks CI status and reads the diff
+3. Checks mergeability + required CI checks
 4. Posts a 3-group verdict: 🔴 Must fix / 🟡 Should fix / 🟢 Safe to merge
-5. Labels it `loop-changes-requested` (issues found) or `loop-approved` (clean)
-6. **Never merges**
+5. Labels it `loop-changes-requested`, `loop-approved`, or
+   `needs-human-review`
+6. **Never merges, never pushes, never uses a formal GitHub review**
 
 ---
 
@@ -169,25 +176,45 @@ Each run reviews **one PR**:
 ## Troubleshooting
 
 **"Queue is empty or all issues are claimed/blocked"**
-→ Either you haven't labeled an issue `agent-ready`, or all issues are being worked. File a new spec with `/finn-spec`.
+→ Either you haven't labeled an issue `agent-ready`, or all issues are being
+  worked. File a new spec with `/finn-spec`.
 
-**A PR has been stuck in `loop-changes-requested` for many loops**
-→ The builder may be stuck in a fix-loop with the reviewer. Read the PR comments. If they disagree, add `needs-human-review` yourself and step in.
+**A PR is stuck oscillating between build → review → build**
+→ The builder and reviewer may disagree. Read the PR comments. If they're
+  stuck, add `needs-human-review` yourself and step in:
+  ```bash
+  gh pr edit <PR-NUMBER> --add-label needs-human-review
+  ```
 
 **`gh` commands fail with "not authenticated"**
 → Run `gh auth login` again.
 
 **ZCode doesn't see the skills**
-→ Make sure the files are at `.zcode/skills/finn-spec/SKILL.md` etc. Restart ZCode.
+→ Make sure the files are at `.zcode/skills/finn-spec/SKILL.md` etc. Restart
+  ZCode.
+
+**The cron didn't fire**
+→ ZCode cron only runs while ZCode is open. Keep the app open while you want
+  the loop active.
+
+**Required CI checks aren't configured**
+→ The reviewer will mark PRs `needs-human-review` until you set up required
+  checks in GitHub (Settings → Branches → Branch protection rules). This is
+  intentional — Finn-loop never treats missing CI as green.
 
 ---
 
 ## Adapting to your project
 
-This setup assumes a typical web/app project with lint + test + build commands. If your project uses different commands (e.g. `pytest`, `cargo test`, `go test`), edit the "verify locally" steps in `.zcode/skills/finn-build/SKILL.md` to match.
+This setup assumes a typical project with lint + test + build commands. If your
+project uses different commands (e.g. `pytest`, `cargo test`, `go test`), edit
+the "Verify" step in `.zcode/skills/finn-build/SKILL.md` to match.
 
 ---
 
 ## Credits
 
-Adapted from Alex Finn's ["Prompting is dead" video](https://youtu.be/FRGLToHAtgc) and his [Finn-loop repo](https://github.com/finna/Finn-loop). The architecture is his; this is a ZCode + GitHub Issues port.
+Adapted from Alex Finn's
+["Prompting is dead" video](https://youtu.be/FRGLToHAtgc) and his
+[Finn-loop repo](https://github.com/finna/Finn-loop). The architecture and the
+three skill designs are his; this is a faithful ZCode + GitHub Issues port.

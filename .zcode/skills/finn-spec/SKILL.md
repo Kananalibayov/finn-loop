@@ -1,93 +1,104 @@
 ---
 name: finn-spec
-description: Interview the user about a raw idea until confident, then file a build-ready issue in GitHub Issues. Use when asked to run the spec interview, draft a spec for an idea, or when the user says /finn-spec.
+description: Interview the user about a raw idea until confident, then file a build-ready issue in GitHub Issues. Use when asked to run Finn-loop's spec interview, draft a queue-ready issue, or plan a feature. Interactive — requires the user present; never run unattended.
 ---
 
-# Finn-Spec: The Interviewer
+# Spec interview
 
-You are the spec writer for the Finn-loop. Your job: turn a vague idea into a bulletproof, build-ready spec filed as a GitHub Issue. You do NOT build anything. You do NOT add the `agent-ready` label — that is the human's approval gate.
+Turns a raw idea into a GitHub Issue so complete that a build agent needs
+nothing beyond the issue. Works like plan mode: research the codebase,
+interview the user in rounds until confident, draft, confirm, file. The user
+is the product brain; you are the codebase brain. Never guess product
+decisions.
 
-## Why this exists
+## 1. Research before asking
 
-Vague specs produce confidently-wrong PRs. A great spec makes the rest of the loop boring. Spend the time here.
+Read the relevant code first. Find which files are involved, what patterns
+already exist, and what constraints apply. Never ask the user something the
+codebase can answer.
 
-## The Flow
+## 2. Interview in rounds
 
-### Step 1 — Understand the raw idea
-The user gives you an idea (e.g. `/finn-spec "I want a login page"`). Restate it back in one sentence so they can confirm you understood.
+Ask 1-4 questions per round, each with concrete options and your recommended
+option first. Ask only genuine product decisions:
 
-### Step 2 — Research the codebase FIRST
-Before asking anything, investigate:
-- Search for existing patterns related to the idea (auth, routes, models, UI components).
-- Note the tech stack, folder structure, and conventions already in use.
-- Identify the files this feature will likely touch.
+- Behavior forks: who sees it, what exactly happens, where does it live
+- Scope boundaries: what is explicitly out of this issue
+- Edge cases that change acceptance criteria: empty states, permissions,
+  failure handling
+- Data implications: existing records, migrations
 
-Do not ask the user things you can discover yourself. The user's time is the bottleneck.
+After each round, fold the answers in and apply the confidence test:
 
-### Step 3 — Interview in rounds
-Ask **1–4 questions per round**. Every question must have a clear purpose. Where useful, offer options (A/B/C) so the user can pick fast instead of typing.
+> Could two different engineers read this spec and ship the same observable
+> behavior?
 
-Cover at minimum:
-- **Outcome**: What observable thing changes for the end user?
-- **Inputs/outputs**: What goes in, what comes out?
-- **Edge cases**: Empty states, errors, limits, permissions.
-- **Scope boundary**: What is explicitly OUT of scope? (This becomes the Non-Goals.)
-- **Definition of done**: How will we know it works? (Manual test steps.)
+If any fork remains, ask another round. There is NO cap on rounds: a small
+fix might need two questions; a big feature legitimately needs 10-20+. Never
+stop early because it feels like a lot of questions. Once the test passes,
+stop — no filler questions.
 
-Keep going for as many rounds as needed (often 10–20+ questions total). Stop only when you are confident you could build this without asking another question.
+## 3. Draft the issue
 
-### Step 4 — Draft and confirm
-Show the user the full spec in this format and ask for confirmation or edits:
+Use exactly this shape:
 
+```md
+## Problem
+
+What user or business problem does this solve? One or two sentences.
+
+## Acceptance Criteria
+
+- [ ] AC-1 — Observable, testable outcome one
+- [ ] AC-2 — Observable, testable outcome two
+
+## Non-goals
+
+- NG-1 — What must NOT change in this task
+- NG-2 — What is explicitly excluded or saved for later
+
+## Relevant files
+
+- path/to/file.ext — why it matters
+
+## Test expectations
+
+- What should be tested, manually or automatically
+
+## How to verify
+
+1. Numbered manual steps anyone can follow to confirm the work: where to
+   go, what to do, exactly what should happen. Cover every AC.
 ```
-## Summary
-<one or two sentences>
 
-## Acceptance Criteria (observable outcomes)
-- AC-1: <what a user/test can observe>
-- AC-2: ...
-- AC-3: ...
+Rules for the draft:
 
-## Non-Goals (binding — do NOT do these)
-- NG-1: ...
-- NG-2: ...
+- Every acceptance criterion is an observable outcome with a stable `AC-N`
+  id. Every non-goal has a stable `NG-N` id. These ids are the contract the
+  build and review skills enforce.
+- No acceptance criterion may require a non-goal. If one does, resolve it
+  with the user before filing.
+- Size the issue to one day of agent work or less. Bigger work becomes a
+  chain of small issues, ordered so each is buildable using only merged
+  code from the ones before it.
 
-## Manual Test Steps
-1. ...
-2. ...
+## 4. Confirm and file
 
-## Likely Files
-- path/to/file.ext — <why>
-```
-
-### Step 5 — File the GitHub Issue
-Once the user confirms, create the issue:
+Show the full draft in chat and get the user's go-ahead. Then create the
+issue:
 
 ```bash
 gh issue create \
   --title "<short title>" \
-  --body "<the spec above>" \
+  --body "<the draft above>" \
   --label "finn-spec"
 ```
 
-If the `finn-spec` label does not exist yet, create it first:
-```bash
-gh label create finn-spec --description "Spec filed by finn-spec" --color FBCA04
-```
+Report the exact issue number and URL returned by GitHub; later skills use
+that number rather than guessing it.
 
-**CRITICAL — do NOT add the `agent-ready` label.** Tell the user:
+## Hard rule
 
-> ✅ Issue #NN filed. When you've reviewed it and it's ready to build, run:
-> `gh issue edit NN --add-label agent-ready`
-
-The human adding `agent-ready` is the approval gate. Never bypass it.
-
-## Rules
-
-1. **Research before asking.** Never ask what you can read from the code.
-2. **One purpose per question.** No compound questions.
-3. **Offer options when possible** so the user can answer fast.
-4. **Acceptance Criteria must be observable.** "User sees X" not "Implement Y".
-5. **Non-Goals are binding.** Get them right — they prevent scope creep later.
-6. **Never self-approve.** You file the issue. The human labels it `agent-ready`.
-7. **If the user goes quiet or says "good enough"**, file what you have and note open questions in the issue body.
+Never apply the `agent-ready` label. The user applies it in GitHub after a
+final read — that label is the approval gate between "idea" and "an agent
+builds it".

@@ -1,120 +1,135 @@
 ---
 name: finn-review
-description: Review open PRs against their linked GitHub issue and required GitHub checks, then post a three-group verdict with Finn-loop labels. Use when asked to run the reviewer, review the build queue, or when the user says /finn-review.
+description: Review open PRs against their linked GitHub issue and required GitHub checks, then post a three-group verdict with Finn-loop labels. Use when asked to run Finn-loop's reviewer or review its PR queue. Designed for the cron loop; never merges or pushes code.
 ---
 
-# Finn-Review: The Reviewer
+# Finn-loop reviewer
 
-You are the reviewer for the Finn-loop. Each time you run, you review **exactly one PR** and post one verdict. Then stop. The next run handles the next PR.
+One pass = one PR reviewed. Under the cron loop, each iteration runs this
+skill once.
 
-You never approve-as-permission. `loop-approved` is **evidence**, not permission. Only humans merge.
-
-## Step 1 — Find one PR that needs review
-
-```bash
-gh search prs --state open --label "loop-review-requested"
-```
-
-Filter to PRs that:
-- Have label `loop-review-requested`
-- Are **not** drafts
-- Have a linked issue (a `Closes #NN` in the body)
-
-If multiple qualify, pick the oldest. If none qualify, tell the user:
-
-> No PRs awaiting review. Nothing to do right now.
-
-…then stop.
-
-**Skip a PR if** you already reviewed it at its current HEAD SHA. Check the PR's review history — if your last review covers the current commit, move on.
-
-## Step 2 — Load the contract
-Read the linked issue (the `#NN` in `Closes #NN`). The issue is the contract. You review **only** against:
-- The Acceptance Criteria (AC-x)
-- The Non-Goals (NG-x)
-
-Anything outside the issue is out of scope for this review.
-
-## Step 3 — Gather evidence
-Run these and read the output before forming an opinion:
+## 1. Find a PR needing review
 
 ```bash
-# Is it mergeable?
-gh pr view <PR-NUMBER> --json mergeable,mergeStateStatus
-
-# Are required CI checks passing?
-gh pr checks <PR-NUMBER> --required
-
-# Full diff
-gh pr diff <PR-NUMBER>
+gh pr list --state open --json number,title,labels,isDraft,headRefOid,updatedAt,url
 ```
 
-## Step 4 — Review the diff against the contract
-For each Acceptance Criterion (AC-x), find the evidence in the diff that it's satisfied.
-For each Non-Goal (NG-x), confirm the PR did NOT do it.
+Skip drafts. For each PR, find the latest comment whose first line is
+`Finn-loop review of COMMIT_SHA`.
 
-Watch for:
-- **[AC-x]** — an acceptance criterion not actually met by the code.
-- **[DEFECT]** — logic error, crash, wrong behavior, missing edge case.
-- **[SECURITY]** — injection, secret leak, missing auth, unsafe input handling.
-- **[CI]** — required checks missing or failing.
-- **[SCOPE]** — the PR does work outside the issue (violates a Non-Goal or adds unrelated changes).
+Skip a PR when that recorded SHA equals its current `headRefOid` and it already
+has `loop-approved`, `loop-changes-requested`, or `needs-human-review`. Review
+it again when new commits landed after the recorded SHA. If nothing needs
+review, say so and end the pass.
 
-## Step 5 — Post ONE verdict
-Post a single review comment with exactly three sections. Use the tags above.
+## 2. Read the contract and code
 
-```
-## Review of PR #<PR> (issue #<NN>)
+- Parse the linked issue number from `Closes #NN` in the PR body and fetch the
+  full GitHub issue, including comments:
 
-### 🔴 Must fix before merge
-- [AC-2] <what's wrong, where, what to do>
-- [SECURITY] <...>
+  ```bash
+  gh issue view <NUMBER> --comments
+  ```
 
-### 🟡 Should fix soon
-- <suggestion — not blocking>
+  No linked issue is a must-fix finding.
+- Read the full diff and every changed file in context.
+- Review only against the linked issue: acceptance-criteria gaps, defects,
+  broken data flow, unnecessary scope expansion, security problems, missing
+  loading/error states, and code future agents will struggle to modify.
+- Do not suggest unrelated improvements unless they are severe.
 
-### 🟢 Safe to merge
-- AC-1 ✅
-- AC-3 ✅
-- CI green ✅
-- No Non-Goal violations ✅
-```
+Every must-fix code finding starts with one of:
 
-## Step 6 — Set labels based on the verdict
+- `[AC-N]` — the PR does not satisfy that acceptance criterion
+- `[DEFECT]` — the implementation is broken while staying inside scope
+- `[SECURITY]` — a severe security issue blocks shipping
+- `[CI]` — a required GitHub check failed
 
-**If any 🔴 must-fix exists:**
+Non-goals are binding. If fixing a finding would require behavior excluded by
+an `NG-N`, do not prescribe code. Record
+`[SCOPE-CONFLICT AC-N ↔ NG-N]` with the exact contradiction and mark the PR for
+human escalation.
+
+## 3. Check merge evidence
+
+Inspect the current PR head, mergeability, and required checks:
+
 ```bash
-gh pr edit <PR-NUMBER> \
-  --remove-label "loop-review-requested" \
-  --add-label "loop-changes-requested"
+gh pr view <NUMBER> --json headRefOid,mergeable,mergeStateStatus
+gh pr checks <NUMBER> --required --json bucket,name,state,link
 ```
-The builder picks this up on its next run and fixes it.
 
-**If the PR is clean (only 🟡/🟢, no 🔴):**
+- If required checks are pending or mergeability is still unknown, report that
+  the PR is waiting and end without posting a verdict or changing labels. A
+  later loop pass will retry it.
+- Failed required checks are `[CI]` must-fix findings.
+- A merge conflict is a `[DEFECT]` must-fix finding.
+- If the repository has no required checks, mark the PR for human escalation;
+  do not apply `loop-approved`. Finn-loop does not treat missing CI as green.
+
+Review the exact `headRefOid` used for this evidence. Re-fetch it immediately
+before posting. If it changed, discard the review and start again on a future
+pass.
+
+## 4. Post one verdict
+
+Post one comment in this structure:
+
+```md
+Finn-loop review of COMMIT_SHA
+
+CI: required checks passed | failed | not configured
+Mergeability: clean | conflicting
+
+## Review
+
+Summary: one or two plain-language sentences on what this PR does.
+
+## 1. Must fix before merge
+
+None.
+
+## 2. Should fix soon
+
+None.
+
+## 3. Safe to merge
+
+Yes — automated review evidence is complete. A human still makes the merge decision.
+```
+
+Post it:
+
 ```bash
-gh pr edit <PR-NUMBER> \
-  --remove-label "loop-review-requested" \
-  --add-label "loop-approved"
+gh pr comment <NUMBER> --body "<the verdict above>"
 ```
-Then notify the human (the user will see it in their PR list). Optionally post:
-> ✅ loop-approved. Ready for human merge when you are.
 
-**If there's a scope conflict, missing CI, or you're unsure:**
+Then set labels based on the verdict, checking existing labels before removing
+them so an absent label does not fail the command:
+
+- No must-fix and no new escalation: add `loop-approved`; remove
+  `loop-changes-requested`. Preserve a pre-existing `needs-human-review` label
+  because it may represent a separate high-risk human gate.
+- Must-fix present: add `loop-changes-requested`; remove `loop-approved`.
+- Scope conflict or no required CI: add `needs-human-review`; remove both
+  `loop-approved` and `loop-changes-requested`; set "Safe to merge" to
+  `No — human decision required.`
+
 ```bash
-gh pr edit <PR-NUMBER> \
-  --remove-label "loop-review-requested" \
-  --add-label "needs-human-review"
+# example: clean review
+gh pr edit <NUMBER> --add-label "loop-approved" --remove-label "loop-changes-requested"
 ```
-This escalates to the human. Use sparingly — only when you genuinely cannot decide.
 
-## Step 7 — Stop
-You reviewed one PR. Stop here. The next run reviews the next one.
+The escalation path deliberately leaves the automated repair queue. A human
+must resolve the reason, change the issue or repository configuration as
+needed, and remove `needs-human-review` before Finn-loop reviews that unchanged
+commit again.
 
-## Rules
+## 5. Hard limits
 
-1. **One PR per run.** Then stop.
-2. **The issue is the contract.** Review only against AC-x and NG-x.
-3. **Evidence, not opinion.** Cite the check output or the diff line.
-4. **`loop-approved` is evidence, not permission.** Humans merge.
-5. **Escalate sparingly.** Use `needs-human-review` only for genuine ambiguity.
-6. **Never merge. Never enable auto-merge.**
+- Never merge or enable auto-merge.
+- Never push commits to the PR branch.
+- Never approve or request changes through a formal GitHub review. Use one
+  comment plus labels because the loop may run on the PR author's token and
+  GitHub rejects self-reviews.
+- `loop-approved` is evidence for a human, not merge authorization.
