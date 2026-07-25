@@ -1,6 +1,6 @@
-// AC-5 (issue #32): WP connections management page.
-// Lists all WP connections (label, URL, username, Test, Delete).
-// "Add connection" form (label, apiUrl, username, appPassword).
+// AC-6 (issue #34): WP connections page + pairing code generation.
+// Lists connections (from #32, which may or may not be merged yet — defensive).
+// Also shows a "Generate Pairing Code" section for the plugin auto-connect flow.
 
 "use client";
 
@@ -15,17 +15,22 @@ type Connection = {
   createdAt: string;
 };
 
-type TestState =
-  | { status: "idle" }
-  | { status: "testing" }
-  | { status: "ok"; username: string; roles: string[] }
-  | { status: "error"; message: string };
+type PairingCode = {
+  code: string;
+  label: string;
+  expiresAt: string;
+};
 
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [testStates, setTestStates] = useState<Record<number, TestState>>({});
+
+  // Pairing state
+  const [pairingLabel, setPairingLabel] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [activeCode, setActiveCode] = useState<PairingCode | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Add-form state
   const [showForm, setShowForm] = useState(false);
@@ -48,6 +53,39 @@ export default function ConnectionsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // AC-6: generate pairing code.
+  async function handleGeneratePairing(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pairingLabel.trim()) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/wp/pairing/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: pairingLabel.trim() }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data?.error || `Generate failed (HTTP ${res.status}).`);
+      }
+      const data = (await res.json()) as PairingCode;
+      setActiveCode(data);
+      setPairingLabel("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function handleCopyCode() {
+    if (!activeCode) return;
+    navigator.clipboard.writeText(activeCode.code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -83,131 +121,113 @@ export default function ConnectionsPage() {
     }
   }
 
-  async function handleTest(conn: Connection) {
-    setTestStates((s) => ({ ...s, [conn.id]: { status: "testing" } }));
-    try {
-      const res = await fetch("/api/wp/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiUrl: conn.apiUrl, username: conn.username, appPassword: "" }),
-      });
-      // Note: the test endpoint needs the actual password, which we don't have client-side.
-      // For now, this will show "need password" — the operator should use the Settings page's
-      // test button (which has the password in the form field). This is a known limitation
-      // of the safe-projection approach (password never returned to the client).
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; username?: string; roles?: string[]; error?: string };
-      if (data.ok) {
-        setTestStates((s) => ({ ...s, [conn.id]: { status: "ok", username: data.username || conn.username, roles: data.roles || [] } }));
-      } else {
-        setTestStates((s) => ({ ...s, [conn.id]: { status: "error", message: data.error || "Test requires the password to be re-entered." } }));
-      }
-    } catch (e) {
-      setTestStates((s) => ({ ...s, [conn.id]: { status: "error", message: (e as Error).message } }));
-    }
-  }
-
   return (
     <main>
       <header className="app-header">
         <h1>WordPress Connections</h1>
-        <p>Manage WordPress sites for your clients. Each project pushes to its linked connection.</p>
+        <p>Manage client WordPress sites. Generate pairing codes for auto-connect via the plugin.</p>
       </header>
 
-      <section className="card">
-        {loading && <div className="preview-empty">Loading…</div>}
+      {/* AC-6: Pairing code generation section */}
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>Generate Pairing Code</h2>
+        <p className="login-sub" style={{ marginBottom: 12 }}>
+          Generate a one-time code, then install the companion plugin on the client&apos;s WordPress
+          and enter this code. The plugin auto-connects — no manual password copy-paste.
+        </p>
+        <form onSubmit={handleGeneratePairing} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            placeholder="Client name (e.g. Acme Corp)"
+            value={pairingLabel}
+            onChange={(e) => setPairingLabel(e.target.value)}
+            style={{ flex: "1 1 200px" }}
+          />
+          <button type="submit" className="btn-primary" disabled={generating || !pairingLabel.trim()}>
+            {generating ? "Generating…" : "Generate code"}
+          </button>
+        </form>
 
+        {activeCode && (
+          <div className="notice" style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <strong style={{ fontSize: 18, letterSpacing: "0.05em" }}>{activeCode.code}</strong>
+              <div style={{ fontSize: 12, marginTop: 2 }}>
+                For: {activeCode.label} · Expires: {new Date(activeCode.expiresAt).toLocaleString()}
+              </div>
+            </div>
+            <button className="btn-secondary" onClick={handleCopyCode}>
+              {copied ? "Copied ✓" : "Copy code"}
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Connections list */}
+      <section className="card">
+        <h2>Connections</h2>
+
+        {loading && <div className="preview-empty">Loading…</div>}
         {error && <div className="error">{error}</div>}
 
         {!loading && connections.length === 0 && !showForm && (
           <div className="preview-empty">
             No WordPress connections yet.{" "}
-            <button className="app-nav-link" onClick={() => setShowForm(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--app-primary)", textDecoration: "underline", fontSize: "inherit" }}>
-              Add one →
+            <button onClick={() => setShowForm(true)} style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: "var(--app-primary)", textDecoration: "underline", fontSize: "inherit",
+            }}>
+              Add one manually →
             </button>
           </div>
         )}
 
         {connections.length > 0 && (
           <ul className="site-list">
-            {connections.map((conn) => {
-              const ts = testStates[conn.id] || { status: "idle" };
-              return (
-                <li key={conn.id} className="site-row">
-                  <div className="site-row-main">
-                    <span className="site-row-name">{conn.label}</span>
-                    <span className="site-row-meta">
-                      {conn.username} · {conn.apiUrl.replace(/^https?:\/\//, "").replace(/\/wp-json.*/, "")}
-                    </span>
-                    {ts.status === "ok" && (
-                      <span className="notice" style={{ display: "inline-block", marginTop: 4, padding: "2px 8px", fontSize: 12 }}>
-                        ✓ {ts.username} ({ts.roles.join(", ")})
-                      </span>
-                    )}
-                    {ts.status === "error" && (
-                      <span className="error" style={{ display: "inline-block", marginTop: 4, padding: "2px 8px", fontSize: 12 }}>
-                        {ts.message}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => handleTest(conn)}
-                      disabled={ts.status === "testing"}
-                    >
-                      {ts.status === "testing" ? "Testing…" : "Test"}
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => handleDelete(conn.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
+            {connections.map((conn) => (
+              <li key={conn.id} className="site-row">
+                <div className="site-row-main">
+                  <span className="site-row-name">{conn.label}</span>
+                  <span className="site-row-meta">
+                    {conn.username} · {conn.apiUrl.replace(/^https?:\/\//, "").replace(/\/wp-json.*/, "")}
+                  </span>
+                </div>
+                <button className="btn-secondary" onClick={() => handleDelete(conn.id)}>
+                  Delete
+                </button>
+              </li>
+            ))}
           </ul>
         )}
 
-        {connections.length > 0 && !showForm && (
+        {!showForm && connections.length > 0 && (
           <button className="btn-secondary" style={{ marginTop: 16 }} onClick={() => setShowForm(true)}>
-            + Add connection
+            + Add manually
           </button>
         )}
 
-        {/* Add connection form */}
         {showForm && (
           <form onSubmit={handleAdd} style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--app-border)" }}>
-            <h2>Add WordPress Connection</h2>
-            <label htmlFor="label">Label <span className="hint">(e.g. "Acme Corp")</span></label>
+            <h2>Add Connection Manually</h2>
+            <label htmlFor="label">Label</label>
             <input id="label" type="text" required value={form.label}
-              onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-              placeholder="Client name" />
-
+              onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="Client name" />
             <label htmlFor="apiUrl">REST API URL</label>
             <input id="apiUrl" type="url" required value={form.apiUrl}
               onChange={(e) => setForm((f) => ({ ...f, apiUrl: e.target.value }))}
               placeholder="https://client-site.com/wp-json" />
-
             <label htmlFor="username">Username</label>
             <input id="username" type="text" required value={form.username}
-              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-              placeholder="wp-admin-user" />
-
+              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} placeholder="wp-admin-user" />
             <label htmlFor="appPassword">Application Password</label>
             <input id="appPassword" type="password" required value={form.appPassword}
               onChange={(e) => setForm((f) => ({ ...f, appPassword: e.target.value }))}
-              placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
-              autoComplete="off" />
-
+              placeholder="xxxx xxxx xxxx xxxx xxxx xxxx" autoComplete="off" />
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button type="submit" className="btn-primary" disabled={saving}>
                 {saving ? "Saving…" : "Save connection"}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
-                Cancel
-              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </form>
         )}

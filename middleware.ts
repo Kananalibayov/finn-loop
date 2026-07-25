@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, verifySession } from "@/lib/auth";
 
-const PUBLIC_PATHS = new Set(["/login", "/logout", "/api/login"]);
+const PUBLIC_PATHS = new Set(["/login", "/logout", "/api/login", "/api/wp/pairing/register"]);
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
