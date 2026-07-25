@@ -30,9 +30,35 @@ export default function HomePage() {
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [activePage, setActivePage] = useState(0);
   const [zipping, setZipping] = useState(false);
+  // AC-5, AC-6 (issue #17): logo upload state.
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [logoName, setLogoName] = useState<string>("");
 
   function set<K extends keyof BusinessInput>(key: K, value: BusinessInput[K]) {
     setInput((s) => ({ ...s, [key]: value }));
+  }
+
+  // AC-5 (issue #17): upload the selected logo file, store the returned URL.
+  async function handleLogoUpload(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/uploads/logo", { method: "POST", body: form });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        throw new Error(data?.error || `Upload failed (HTTP ${res.status}).`);
+      }
+      set("logoUrl", data.url);
+      setLogoName(file.name);
+    } catch (e) {
+      setUploadError((e as Error).message);
+    } finally {
+      setUploading(false);
+    }
   }
 
   const canSubmit =
@@ -175,14 +201,35 @@ export default function HomePage() {
             placeholder={"123 Market St\nSpringfield, CA 90001"}
           />
 
-          <label htmlFor="lg">Logo URL <span className="hint">(optional)</span></label>
-          <input
-            id="lg"
-            type="url"
-            value={input.logoUrl}
-            onChange={(e) => set("logoUrl", e.target.value)}
-            placeholder="https://..."
-          />
+          {/* AC-5 (issue #17): logo upload widget (replaces the old URL field). */}
+          <label htmlFor="lg">Logo <span className="hint">(optional — upload a file)</span></label>
+          <div className="logo-upload">
+            <input
+              id="lg"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => handleLogoUpload(e.target.files?.[0])}
+              disabled={uploading}
+              style={{ display: "none" }}
+            />
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => document.getElementById("lg")?.click()}
+              disabled={uploading}
+            >
+              {uploading ? "Uploading…" : "Choose logo file"}
+            </button>
+            {logoName && !uploading && (
+              <span className="logo-name">✓ {logoName}</span>
+            )}
+            {input.logoUrl && !logoName && (
+              <span className="logo-name hint">(existing logo set)</span>
+            )}
+          </div>
+          {uploadError && (
+            <div className="error" style={{ marginTop: 8 }}>{uploadError}</div>
+          )}
 
           <label htmlFor="bc">Brand colors <span className="hint">(optional, e.g. "#1d4ed8, warm earth tones")</span></label>
           <input

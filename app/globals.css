@@ -422,3 +422,16 @@ textarea:focus {
 .site-row-delete {
   flex-shrink: 0;
 }
+
+/* ---- Logo upload widget (issue #17, AC-5) ---- */
+.logo-upload {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.logo-name {
+  font-size: 13px;
+  color: var(--app-muted);
+}
