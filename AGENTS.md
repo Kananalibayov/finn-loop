@@ -54,11 +54,33 @@ registered in a separate ZCode session — see `README.md` for instructions.
 
 ## Hard limits enforced by the skills
 
-- Agents never merge, never enable auto-merge.
 - Agents never push to the main branch directly.
 - The reviewer uses a comment + labels, never a formal GitHub review (because
   GitHub rejects self-reviews on the PR author's token).
 - Missing CI is treated as "needs-human-review", never as green.
+
+## Merge policy (user-authorized for autonomous operation)
+
+The user has **authorized auto-merge** to enable unattended progression. When
+ALL of the following are true, the next loop pass should merge the PR:
+
+1. The PR is labeled `loop-approved` by the reviewer.
+2. The required `build` CI check has passed.
+3. The PR is mergeable (`gh pr view --json mergeable`).
+4. The PR is not labeled `needs-human-review`.
+
+Merge command:
+```bash
+gh pr merge <PR-NUMBER> --squash --delete-branch
+```
+
+After merging, immediately re-fetch `main` locally so the next issue builds on
+the merged code:
+```bash
+git checkout main && git pull && git checkout -b <next-issue>-<slug>
+```
+
+This authorization can be revoked by the user at any time.
 
 ## Working conventions
 
