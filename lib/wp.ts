@@ -27,6 +27,49 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const USER_AGENT = "ai-website-generator/0.1";
 
 /**
+ * Shared internal request helper — builds the auth header, sets UA + timeout,
+ * and returns the Response. Throws on network errors (callers wrap in try/catch).
+ */
+async function wpFetch(
+  creds: WpCreds,
+  path: string,
+  options: { method: string; body?: Record<string, unknown>; timeoutMs: number },
+): Promise<Response> {
+  const base = creds.apiUrl.replace(/\/+$/, "");
+  const url = `${base}${path}`;
+  const basic = Buffer.from(
+    `${creds.username}:${creds.appPassword}`,
+  ).toString("base64");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: options.method,
+      headers: {
+        Authorization: `Basic ${basic}`,
+        "User-Agent": USER_AGENT,
+        Accept: "application/json",
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Shape of a WP page (post type=page) from the REST API. */
+interface WpPage {
+  id: number;
+  slug: string;
+  title: { rendered: string };
+  status: string;
+}
+
+/**
  * AC-1: WP REST API client. One instance per WP target. Construct lazily
  * (callers create it when they have creds, not at module load time).
  */
@@ -93,5 +136,76 @@ export class WpClient {
       }
       return { ok: false, error: `Network error: ${err.message}` };
     }
+  }
+
+  // --- Phase 1 (issue #30): page push methods ---
+
+  /**
+   * AC-1: create a new WP page (post type=page). Returns the WP page ID.
+   * Throws on failure — callers handle errors.
+   */
+  async createPage(input: {
+    title: string;
+    slug: string;
+    content: string;
+    status?: string;
+  }): Promise<number> {
+    const res = await wpFetch(this.creds, "/wp/v2/pages", {
+      method: "POST",
+      body: {
+        title: input.title,
+        slug: input.slug,
+        status: input.status ?? "draft",
+        content: input.content,
+      },
+      timeoutMs: this.timeoutMs,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({})) as { message?: string };
+      throw new Error(`createPage failed (HTTP ${res.status}): ${errBody.message ?? res.statusText}`);
+    }
+    const page = (await res.json()) as WpPage;
+    return page.id;
+  }
+
+  /**
+   * AC-2: update an existing WP page by its ID. Returns the updated page.
+   * Throws on failure.
+   */
+  async updatePage(wpPageId: number, input: {
+    title?: string;
+    content?: string;
+  }): Promise<WpPage> {
+    const res = await wpFetch(this.creds, `/wp/v2/pages/${wpPageId}`, {
+      method: "POST",
+      body: {
+        ...(input.title ? { title: input.title } : {}),
+        ...(input.content ? { content: input.content } : {}),
+      },
+      timeoutMs: this.timeoutMs,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({})) as { message?: string };
+      throw new Error(`updatePage failed (HTTP ${res.status}): ${errBody.message ?? res.statusText}`);
+    }
+    return (await res.json()) as WpPage;
+  }
+
+  /**
+   * AC-3: find a page ID by its slug. Returns the WP page ID, or null if no
+   * page with that slug exists. Used on first push to prevent duplicates.
+   */
+  async getPageIdBySlug(slug: string): Promise<number | null> {
+    const res = await wpFetch(
+      this.creds,
+      `/wp/v2/pages?slug=${encodeURIComponent(slug)}&context=edit&per_page=1`,
+      { method: "GET", timeoutMs: this.timeoutMs },
+    );
+    if (!res.ok) {
+      // If we can't check, return null (the caller will try to create).
+      return null;
+    }
+    const pages = (await res.json()) as WpPage[];
+    return pages.length > 0 ? pages[0].id : null;
   }
 }
