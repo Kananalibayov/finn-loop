@@ -32,3 +32,6 @@ next-env.d.ts
 # zcode
 # Skills (.zcode/skills/) are tracked; plans/ are per-session scratch.
 .zcode/plans/
+
+# AC-7 (issue #4): local SQLite database + data dir — runtime only, never commit.
+/data

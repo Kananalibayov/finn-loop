@@ -40,4 +40,6 @@ export interface GenerateResponse {
   pages: GeneratedPage[];
   themeId: import("./themes").ThemeId;
   defaultsApplied: { logo: boolean; colors: boolean };
+  /** AC-3 (issue #4): id of the persisted site row, if save succeeded. */
+  id?: number;
 }
