@@ -30,6 +30,9 @@ export default function HomePage() {
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [activePage, setActivePage] = useState(0);
   const [zipping, setZipping] = useState(false);
+  // AC-5 (issue #18): per-button busy states for the two new export formats.
+  const [buildingHtml, setBuildingHtml] = useState(false);
+  const [buildingStatic, setBuildingStatic] = useState(false);
   // AC-5, AC-6 (issue #17): logo upload state.
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -98,21 +101,27 @@ export default function HomePage() {
     }
   }
 
-  async function handleDownload() {
+  // AC-4, AC-5 (issue #18): generic export handler — posts pages to an export
+  // endpoint and triggers a download of the returned blob. Used by all three
+  // buttons (ZIP, Single HTML, Static ZIP).
+  async function handleExport(endpoint: string, filename: string, busyKey: "zipping" | "buildingHtml" | "buildingStatic") {
     if (!result) return;
-    setZipping(true);
+    const setter = busyKey === "zipping" ? setZipping
+      : busyKey === "buildingHtml" ? setBuildingHtml
+      : setBuildingStatic;
+    setter(true);
     try {
-      const res = await fetch("/api/zip", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(result.pages),
       });
-      if (!res.ok) throw new Error("Could not build ZIP.");
+      if (!res.ok) throw new Error(`Export failed (HTTP ${res.status}).`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "generated-site.zip";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -120,7 +129,7 @@ export default function HomePage() {
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setZipping(false);
+      setter(false);
     }
   }
 
@@ -350,13 +359,28 @@ export default function HomePage() {
                     </button>
                   ))}
                 </div>
-                <div style={{ marginLeft: "auto" }}>
+                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                  {/* AC-4, AC-5, AC-6 (issue #18): three export buttons. */}
                   <button
                     className="btn-secondary"
-                    onClick={handleDownload}
-                    disabled={zipping}
+                    onClick={() => handleExport("/api/zip", "generated-site.zip", "zipping")}
+                    disabled={zipping || buildingHtml || buildingStatic || !result}
                   >
                     {zipping ? "Zipping…" : "Download ZIP"}
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => handleExport("/api/export/single-html", "site.html", "buildingHtml")}
+                    disabled={zipping || buildingHtml || buildingStatic || !result}
+                  >
+                    {buildingHtml ? "Building…" : "Single HTML"}
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => handleExport("/api/export/static-zip", "static-site.zip", "buildingStatic")}
+                    disabled={zipping || buildingHtml || buildingStatic || !result}
+                  >
+                    {buildingStatic ? "Zipping…" : "Static ZIP"}
                   </button>
                 </div>
               </div>
