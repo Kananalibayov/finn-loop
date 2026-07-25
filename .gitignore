@@ -28,3 +28,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# zcode
+# Skills (.zcode/skills/) are tracked; plans/ are per-session scratch.
+.zcode/plans/
