@@ -297,3 +297,32 @@ textarea:focus {
     transform: rotate(360deg);
   }
 }
+
+/* ---- Login page (issue #6) ---- */
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+}
+
+.login-card h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.login-sub {
+  margin: 0 0 20px;
+  color: var(--app-muted);
+  font-size: 14px;
+}
+
+.login-card input[type="password"] {
+  margin-bottom: 4px;
+}
