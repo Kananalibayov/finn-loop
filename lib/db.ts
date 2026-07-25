@@ -8,7 +8,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export interface SiteRow {
+export interface ProjectRow {
   id: number;
   business_name: string;
   tagline: string;
@@ -17,7 +17,7 @@ export interface SiteRow {
   input_json: string;
   pages_json: string;
   created_at: string;
-  /** AC-1 (issue #16): groups a site with its regenerated versions. */
+  /** AC-1 (issue #16): groups a project with its regenerated versions. */
   site_group_id: string;
 }
 
@@ -63,10 +63,10 @@ function db(): Database.Database {
   return conn;
 }
 
-/** AC-3: insert a generated site, returns its new id.
+/** AC-3: insert a generated project, returns its new id.
  *  AC-3 (issue #16): a fresh generation starts its own group — site_group_id
  *  is set to the new row's own id after INSERT (the id is auto-generated). */
-export function insertSite(input: {
+export function insertProject(input: {
   businessName: string;
   tagline: string;
   themeId: string;
@@ -101,7 +101,7 @@ export function insertSite(input: {
 /** AC-2 (issue #16): insert a regenerated version into an existing group.
  *  The new row shares the original's site_group_id but gets a fresh id +
  *  created_at; the original row is preserved unchanged. Returns the new id. */
-export function regenerateSite(
+export function regenerateProject(
   groupId: string,
   input: {
     businessName: string;
@@ -130,26 +130,26 @@ export function regenerateSite(
   return Number(info.lastInsertRowid);
 }
 
-/** AC-4: list saved sites newest-first (projection only — no heavy pages JSON). */
-export function listSites(): Array<
-  Pick<SiteRow, "id" | "business_name" | "theme_id" | "created_at">
+/** AC-4: list saved projects newest-first (projection only — no heavy pages JSON). */
+export function listProjects(): Array<
+  Pick<ProjectRow, "id" | "business_name" | "theme_id" | "created_at">
 > {
   const stmt = db().prepare(
     `SELECT id, business_name, theme_id, created_at FROM sites ORDER BY id DESC`,
   );
   return stmt.all() as Array<
-    Pick<SiteRow, "id" | "business_name" | "theme_id" | "created_at">
+    Pick<ProjectRow, "id" | "business_name" | "theme_id" | "created_at">
   >;
 }
 
-/** AC-5: fetch the full site (input + pages) for re-rendering. */
-export function getSite(id: number): SiteRow | undefined {
+/** AC-5: fetch the full project (input + pages) for re-rendering. */
+export function getProject(id: number): ProjectRow | undefined {
   const stmt = db().prepare(`SELECT * FROM sites WHERE id = ?`);
-  return stmt.get(id) as SiteRow | undefined;
+  return stmt.get(id) as ProjectRow | undefined;
 }
 
-/** AC-6: remove a saved site. Returns true if a row was actually deleted. */
-export function deleteSite(id: number): boolean {
+/** AC-6: remove a saved project. Returns true if a row was actually deleted. */
+export function deleteProject(id: number): boolean {
   const stmt = db().prepare(`DELETE FROM sites WHERE id = ?`);
   const info = stmt.run(id);
   return info.changes > 0;

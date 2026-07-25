@@ -1,5 +1,5 @@
-// AC-2, AC-4 (issue #5): single-site preview page.
-// Fetches GET /api/sites/[id] (the full row incl. pages_json), parses the stored
+// AC-2, AC-4 (issue #5): single-project preview page (renamed from "site" in #25).
+// Fetches GET /api/projects/[id] (the full row incl. pages_json), parses the stored
 // pages, and renders them in the same preview UI as the generator: page tabs +
 // iframe (srcDoc) + a Download ZIP button that rebuilds the ZIP via /api/zip.
 
@@ -10,7 +10,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { BusinessInput, GeneratedPage } from "@/lib/types";
 
-type FullSite = {
+type FullProject = {
   id: number;
   business_name: string;
   pages_json: string;
@@ -20,12 +20,12 @@ type FullSite = {
 
 type Status = "loading" | "ready" | "not-found" | "error";
 
-export default function SitePreviewPage() {
+export default function ProjectPreviewPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const router = useRouter();
 
-  const [site, setSite] = useState<FullSite | null>(null);
+  const [project, setProject] = useState<FullProject | null>(null);
   const [pages, setPages] = useState<GeneratedPage[]>([]);
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -50,16 +50,16 @@ export default function SitePreviewPage() {
     (async () => {
       setStatus("loading");
       try {
-        const res = await fetch(`/api/sites/${id}`, { cache: "no-store" });
+        const res = await fetch(`/api/projects/${id}`, { cache: "no-store" });
         if (res.status === 404) {
           if (!cancelled) setStatus("not-found");
           return;
         }
         if (!res.ok) throw new Error(`Failed to load (HTTP ${res.status}).`);
-        const data = (await res.json()) as FullSite;
+        const data = (await res.json()) as FullProject;
         const parsed = safeParsePages(data.pages_json);
         if (cancelled) return;
-        setSite(data);
+        setProject(data);
         setPages(parsed);
         // AC-4 (issue #16): pre-fill the edit form from the saved input.
         setEditInput(safeParseInput(data.input_json));
@@ -119,7 +119,7 @@ export default function SitePreviewPage() {
     setRegenerating(true);
     setError(null);
     try {
-      const res = await fetch(`/api/sites/${id}/regenerate`, {
+      const res = await fetch(`/api/projects/${id}/regenerate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input: editInput }),
@@ -130,7 +130,7 @@ export default function SitePreviewPage() {
       }
       const data = (await res.json()) as { id: number };
       // Navigate to the freshly-generated version.
-      router.push(`/sites/${data.id}`);
+      router.push(`/projects/${data.id}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -141,7 +141,7 @@ export default function SitePreviewPage() {
   if (status === "loading") {
     return (
       <main>
-        <div className="preview-empty">Loading site…</div>
+        <div className="preview-empty">Loading project…</div>
       </main>
     );
   }
@@ -150,10 +150,10 @@ export default function SitePreviewPage() {
     return (
       <main>
         <section className="card">
-          <h2>Site not found</h2>
-          <p>This site may have been deleted.</p>
-          <Link href="/sites" className="btn-secondary" style={{ display: "inline-block", marginTop: 12 }}>
-            ← Back to Saved sites
+          <h2>Project not found</h2>
+          <p>This project may have been deleted.</p>
+          <Link href="/projects" className="btn-secondary" style={{ display: "inline-block", marginTop: 12 }}>
+            ← Back to Projects
           </Link>
         </section>
       </main>
@@ -164,9 +164,9 @@ export default function SitePreviewPage() {
     return (
       <main>
         <section className="card">
-          <div className="error">{error || "Could not load this site."}</div>
-          <Link href="/sites" className="btn-secondary" style={{ display: "inline-block", marginTop: 12 }}>
-            ← Back to Saved sites
+          <div className="error">{error || "Could not load this project."}</div>
+          <Link href="/projects" className="btn-secondary" style={{ display: "inline-block", marginTop: 12 }}>
+            ← Back to Projects
           </Link>
         </section>
       </main>
@@ -176,11 +176,11 @@ export default function SitePreviewPage() {
   return (
     <main>
       <div className="preview-toolbar">
-        <Link href="/sites" className="btn-secondary">
+        <Link href="/projects" className="btn-secondary">
           ← Back
         </Link>
         <h2 style={{ margin: "0 0 0 12px" }}>
-          {site?.business_name || "(untitled)"}
+          {project?.business_name || "(untitled)"}
         </h2>
         <div style={{ marginLeft: "auto" }}>
           <button

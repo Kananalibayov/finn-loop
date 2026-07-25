@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/", label: "Generator" },
-  { href: "/sites", label: "Saved sites" },
+  { href: "/projects", label: "Projects" },
 ] as const;
 
 /** True when `href` corresponds to the active route. "/" matches only "/". */

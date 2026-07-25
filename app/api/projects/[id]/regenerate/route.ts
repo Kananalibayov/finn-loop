@@ -1,10 +1,10 @@
-// AC-5 (issue #16): regenerate a saved site with edited input.
-// Reads the original site (for its site_group_id + theme/mode), runs the
+// AC-5 (issue #16): regenerate a saved project with edited input.
+// Reads the original project (for its site_group_id + theme/mode), runs the
 // shared generation pipeline with the edited input, inserts a new row in the
-// same group via regenerateSite(), and returns the new site's id.
+// same group via regenerateProject(), and returns the new project's id.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSite, regenerateSite } from "@/lib/db";
+import { getProject, regenerateProject } from "@/lib/db";
 import { generatePages } from "@/lib/generate";
 import type { BusinessInput, Mode } from "@/lib/types";
 import type { ThemeId } from "@/lib/themes";
@@ -22,10 +22,10 @@ export async function POST(
     return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   }
 
-  // Load the original site — it carries site_group_id, mode, themeId.
-  const original = getSite(num);
+  // Load the original project — it carries site_group_id, mode, themeId.
+  const original = getProject(num);
   if (!original) {
-    return NextResponse.json({ error: "Site not found." }, { status: 404 });
+    return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
 
   // Parse the edited input from the request body.
@@ -53,7 +53,7 @@ export async function POST(
     const { pages } = await generatePages({ input, mode, themeId });
 
     // Insert the new version in the original's group (original row preserved).
-    const newId = regenerateSite(original.site_group_id, {
+    const newId = regenerateProject(original.site_group_id, {
       businessName: input.businessName,
       tagline: input.tagline,
       themeId,
