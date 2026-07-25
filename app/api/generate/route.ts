@@ -1,43 +1,18 @@
 // AC-4, AC-5, AC-6, AC-9: generate endpoint.
 // Calls OpenAI once per requested page, returns the generated HTML.
 // On any failure, returns a structured error so the UI can show + retry.
+//
+// AC-5 (issue #16): the page-generation core now lives in lib/generate.ts so
+// both this endpoint and /api/sites/[id]/regenerate share one implementation.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getOpenAI, GENERATION_MODEL } from "@/lib/openai";
-import { buildPrompt, cleanHtml } from "@/lib/prompts";
 import { getTheme } from "@/lib/themes";
-import { ALL_PAGES, GenerateRequest, GenerateResponse, GeneratedPage, PageKey } from "@/lib/types";
+import { GenerateRequest, GenerateResponse } from "@/lib/types";
 import { insertSite } from "@/lib/db";
+import { generatePages } from "@/lib/generate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const PAGE_TITLES: Record<PageKey, string> = {
-  home: "Home",
-  services: "Services",
-  gallery: "Gallery",
-  contact: "Contact",
-  about: "About",
-};
-
-async function generatePage(
-  client: ReturnType<typeof getOpenAI>,
-  page: PageKey,
-  body: GenerateRequest,
-): Promise<GeneratedPage> {
-  const theme = getTheme(body.themeId);
-  const { system, user } = buildPrompt(page, body.input, theme);
-  const res = await client.chat.completions.create({
-    model: GENERATION_MODEL,
-    temperature: 0.7,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-  });
-  const raw = res.choices[0]?.message?.content ?? "";
-  return { key: page, title: PAGE_TITLES[page], html: cleanHtml(raw) };
-}
 
 export async function POST(req: NextRequest) {
   let body: GenerateRequest;
@@ -62,29 +37,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid mode." }, { status: 400 });
   }
 
-  let client;
   try {
-    client = getOpenAI();
-  } catch (e) {
-    return NextResponse.json(
-      { error: (e as Error).message },
-      { status: 500 },
-    );
-  }
-
-  const pages = mode === "home" ? (["home"] as PageKey[]) : ALL_PAGES;
-
-  try {
-    // Sequential to keep token usage predictable; pages are small.
-    const out: GeneratedPage[] = [];
-    for (const p of pages) {
-      out.push(await generatePage(client, p, body));
-    }
+    const { pages, themeId: resolvedThemeId } = await generatePages({
+      input,
+      mode,
+      themeId,
+    });
 
     const theme = getTheme(themeId);
     const response: GenerateResponse = {
-      pages: out,
-      themeId: theme.id,
+      pages,
+      themeId: resolvedThemeId,
       defaultsApplied: {
         // AC-9: report whether defaults were used so the UI can show it.
         logo: !input.logoUrl,
@@ -102,7 +65,7 @@ export async function POST(req: NextRequest) {
         themeId: theme.id,
         mode,
         inputJson: JSON.stringify(input),
-        pagesJson: JSON.stringify(out),
+        pagesJson: JSON.stringify(pages),
       });
     } catch (persistErr) {
       console.error("[generate] DB save failed:", (persistErr as Error).message);
@@ -110,6 +73,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(response);
   } catch (e) {
+    // Includes the OPENAI_API_KEY-missing case from getOpenAI().
     const msg = (e as Error).message || "Generation failed.";
     return NextResponse.json({ error: msg }, { status: 502 });
   }
