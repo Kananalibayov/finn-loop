@@ -59,6 +59,18 @@ function db(): Database.Database {
     // Backfill existing rows: each forms a singleton group keyed by its own id.
     conn.exec(`UPDATE sites SET site_group_id = CAST(id AS TEXT) WHERE site_group_id IS NULL;`);
   }
+  // AC-1 (issue #24): wp_settings — single-row table for WP connection creds.
+  // id is always 1 (enforced by the helpers). Password stored as plaintext
+  // (NG-1: single-operator tool on a Docker volume; encryption deferred).
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS wp_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      api_url TEXT NOT NULL,
+      username TEXT NOT NULL,
+      app_password TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
   dbInstance = conn;
   return conn;
 }
@@ -154,3 +166,47 @@ export function deleteProject(id: number): boolean {
   const info = stmt.run(id);
   return info.changes > 0;
 }
+
+// --- WordPress settings (issue #24) ---
+
+/** AC-1: row shape for the wp_settings table (single row, id always 1). */
+export interface WpSettingsRow {
+  id: number;
+  api_url: string;
+  username: string;
+  app_password: string;
+  updated_at: string;
+}
+
+/** AC-2: return the single WP settings row, or null if none saved yet. */
+export function getWpSettings(): WpSettingsRow | null {
+  const row = db().prepare(`SELECT * FROM wp_settings WHERE id = 1`).get();
+  return (row as WpSettingsRow | undefined) ?? null;
+}
+
+/** AC-2: upsert the single WP settings row (id always 1). Returns the stored row. */
+export function saveWpSettings(input: {
+  apiUrl: string;
+  username: string;
+  appPassword: string;
+}): WpSettingsRow {
+  const conn = db();
+  const now = new Date().toISOString();
+  // UPSERT via ON CONFLICT — the id=1 row is created if missing, updated otherwise.
+  conn.prepare(
+    `INSERT INTO wp_settings (id, api_url, username, app_password, updated_at)
+     VALUES (1, @apiUrl, @username, @appPassword, @updatedAt)
+     ON CONFLICT(id) DO UPDATE SET
+       api_url = excluded.api_url,
+       username = excluded.username,
+       app_password = excluded.app_password,
+       updated_at = excluded.updated_at`,
+  ).run({
+    apiUrl: input.apiUrl,
+    username: input.username,
+    appPassword: input.appPassword,
+    updatedAt: now,
+  });
+  return getWpSettings()!;
+}
+

@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/", label: "Generator" },
   { href: "/projects", label: "Projects" },
+  { href: "/settings", label: "Settings" },
 ] as const;
 
 /** True when `href` corresponds to the active route. "/" matches only "/". */
