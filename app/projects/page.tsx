@@ -1,19 +1,26 @@
-// AC-1, AC-3, AC-6 (issue #5): projects dashboard (renamed from "saved sites" in #25).
-// Lists saved projects newest-first (AC-1), with a per-row Delete button that
-// calls DELETE /api/projects/[id] and removes the row (AC-3), and a friendly
-// empty state linking back to the generator (AC-6). Each row links to
-// /projects/[id] for the preview (AC-2).
+// AC-3, AC-4, AC-5, AC-6 (issue #38): projects dashboard — rich site cards.
+// Replaces the flat single-column list (issue #5) with a responsive card grid
+// that surfaces status data already in the DB: theme, WP-push state, and the
+// number of regenerated versions in the project's group. The data-loading
+// logic, delete behavior, and loading/error/empty states are unchanged — only
+// the rendering is promoted to dashboard cards.
 
 "use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+// AC-1 (issue #38): extended projection — now includes tagline, mode,
+// wp_page_ids (WP push state), and group_size (regenerated version count).
 type ProjectListItem = {
   id: number;
   business_name: string;
+  tagline: string;
   theme_id: string;
+  mode: string;
   created_at: string;
+  wp_page_ids: string | null;
+  group_size: number;
 };
 
 type Status = "loading" | "ready" | "error";
@@ -44,16 +51,14 @@ export default function ProjectsPage() {
   }, []);
 
   async function handleDelete(id: number) {
-    // AC-3: hard delete via DELETE /api/projects/[id]. No confirmation modal —
-    // the generator flow treats these as disposable; the spec's "removes the
-    // row" implies immediate removal. (Undo is explicitly out of scope for #5.)
+    // Hard delete via DELETE /api/projects/[id] (unchanged from issue #5).
+    // Optimistic local removal — no full refetch needed.
     setDeletingId(id);
     try {
       const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) {
         throw new Error(`Delete failed (HTTP ${res.status}).`);
       }
-      // Remove the row locally; no full refetch needed.
       setProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (e) {
       setError((e as Error).message);
@@ -69,53 +74,84 @@ export default function ProjectsPage() {
         <p>Browse, preview, delete, or re-download previously generated projects.</p>
       </header>
 
-      <section className="card">
-        {status === "loading" && <div className="preview-empty">Loading…</div>}
+      <div className="dashboard-grid">
+        {status === "loading" && (
+          <div className="card dashboard-empty">
+            <div className="preview-empty">Loading…</div>
+          </div>
+        )}
 
         {status === "error" && (
-          <div className="error">
-            {error || "Could not load projects."}
-            <div style={{ marginTop: 8 }}>
-              <button className="btn-secondary" onClick={load}>
-                Try again
-              </button>
+          <div className="card dashboard-empty">
+            <div className="error">
+              {error || "Could not load projects."}
+              <div style={{ marginTop: 8 }}>
+                <button className="btn-secondary" onClick={load}>
+                  Try again
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {status === "ready" && projects.length === 0 && (
-          <div className="preview-empty">
-            No projects yet.{" "}
-            <Link href="/" className="app-nav-link">
-              Generate one →
-            </Link>
+          <div className="card dashboard-empty">
+            <div className="preview-empty">
+              No projects yet.{" "}
+              <Link href="/" className="app-nav-link">
+                Generate one →
+              </Link>
+            </div>
           </div>
         )}
 
-        {status === "ready" && projects.length > 0 && (
-          <ul className="site-list">
-            {projects.map((p) => (
-              <li key={p.id} className="site-row">
-                <Link href={`/projects/${p.id}`} className="site-row-main">
-                  <span className="site-row-name">{p.business_name || "(untitled)"}</span>
-                  <span className="site-row-meta">
-                    {p.theme_id} · {formatDate(p.created_at)}
-                  </span>
+        {status === "ready" &&
+          projects.map((p) => {
+            // AC-5: derive status badges from the row.
+            const pushed = p.wp_page_ids !== null && p.wp_page_ids !== "";
+            const multiVersion = p.group_size > 1;
+            return (
+              <article key={p.id} className="project-card">
+                {/* AC-4(a): title links to the detail page. */}
+                <Link href={`/projects/${p.id}`} className="project-card-title">
+                  {p.business_name || "(untitled)"}
                 </Link>
-                <button
-                  type="button"
-                  className="btn-secondary site-row-delete"
-                  onClick={() => handleDelete(p.id)}
-                  disabled={deletingId === p.id}
-                  title="Delete this project"
-                >
-                  {deletingId === p.id ? "Deleting…" : "Delete"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                {/* AC-4(b): tagline subtitle, only when present. */}
+                {p.tagline && <p className="project-card-subtitle">{p.tagline}</p>}
+
+                {/* AC-5: status badges + date meta. */}
+                <div className="project-card-meta">
+                  <span className="badge badge--theme">{p.theme_id}</span>
+                  {pushed ? (
+                    <span className="badge badge--wp-pushed">✓ Pushed to WP</span>
+                  ) : (
+                    <span className="badge badge--wp-local">Local only</span>
+                  )}
+                  {multiVersion && (
+                    <span className="badge badge--version">v{p.group_size}</span>
+                  )}
+                  <span className="project-card-date">{formatDate(p.created_at)}</span>
+                </div>
+
+                {/* AC-4(e): actions row. */}
+                <div className="project-card-actions">
+                  <Link href={`/projects/${p.id}`} className="btn-primary">
+                    Open
+                  </Link>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleDelete(p.id)}
+                    disabled={deletingId === p.id}
+                    title="Delete this project"
+                  >
+                    {deletingId === p.id ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+      </div>
     </main>
   );
 }
