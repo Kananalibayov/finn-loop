@@ -41,6 +41,11 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+# Ensure /app/public exists in the build stage so the runner's COPY always
+# succeeds (this project currently has no /public assets; Next.js's own Docker
+# example does the same mkdir -p to handle the empty-public case).
+RUN mkdir -p /app/public
+
 # better-sqlite3 ships prebuilt binaries; if the alpine/musl prebuild didn't
 # match, compile the native binding now against the exact runtime ABI.
 RUN npm rebuild better-sqlite3
@@ -66,9 +71,15 @@ RUN addgroup --system --gid 1001 nodejs \
 
 # Standalone server + the minimal node_modules it needs.
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
+# @next/env is NOT included in the standalone bundle but our entrypoint needs
+# it to load /app/.env (Next.js's standalone production server does not load
+# .env files itself the way `next dev` does).
+COPY --from=build --chown=nextjs:nodejs /app/node_modules/@next/env ./node_modules/@next/env
+# Entrypoint that loads .env before starting the server.
+COPY --chown=nextjs:nodejs docker-entrypoint.js ./docker-entrypoint.js
 # Static assets (the standalone server expects these siblings).
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
-# Public dir (if present).
+# Public dir (guaranteed to exist because the build stage creates it).
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 
 # Persistent data dir for SQLite + uploads (compose mounts a named volume here).
@@ -78,5 +89,7 @@ USER nextjs
 
 EXPOSE 3000
 
-# node server.js is the entrypoint produced by `output: "standalone"`.
-CMD ["node", "server.js"]
+# Run the standalone server via docker-entrypoint.js, which loads /app/.env
+# (mounted read-only by compose) into process.env before starting. The Next.js
+# standalone production server does not load .env itself the way `next dev` does.
+CMD ["node", "docker-entrypoint.js"]
