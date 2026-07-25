@@ -20,6 +20,36 @@ Before changing GitHub, branches, or files:
   is dirty, report the paths and end the pass. Never stash, reset, overwrite,
   or commit unrelated work.
 
+## 0a. Auto-merge gate (user-authorized)
+
+The user has authorized auto-merge to enable unattended progression. BEFORE
+claiming new work, check for any PR that is ready to merge:
+
+```bash
+gh pr list --state open --label loop-approved \
+  --json number,mergeable,labels --jq '.[] | {number, mergeable, labels: [.labels[].name]}'
+```
+
+For each candidate, merge it ONLY if ALL are true:
+1. Labeled `loop-approved`
+2. `mergeable` == "MERGEABLE"
+3. NOT labeled `needs-human-review`
+4. The required `build` CI check passed:
+   ```bash
+   gh pr checks <NUMBER> --required --json bucket,name,state
+   ```
+   (every required check must have `state` == "SUCCESS")
+
+If conditions hold, merge:
+```bash
+gh pr merge <NUMBER> --squash --delete-branch
+```
+Then sync local main so the next issue builds on merged code:
+```bash
+git checkout main && git pull && git checkout -
+```
+A merge counts as the unit of work for this pass — end the pass after merging.
+
 ## 1. Review feedback first
 
 List open PRs labeled `loop-changes-requested`, including their labels:
