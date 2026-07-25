@@ -173,16 +173,38 @@ export function regenerateProject(
   return Number(info.lastInsertRowid);
 }
 
-/** AC-4: list saved projects newest-first (projection only — no heavy pages JSON). */
-export function listProjects(): Array<
-  Pick<ProjectRow, "id" | "business_name" | "theme_id" | "created_at">
-> {
+/** AC-4: list saved projects newest-first (projection only — no heavy pages JSON).
+ *  AC-1 (issue #38): extended to surface status data already in the table for
+ *  the dashboard card grid — tagline, mode, WP-push state (wp_page_ids), and
+ *  group_size (count of regenerated versions sharing site_group_id). No new
+ *  columns; purely a richer SELECT + return type. */
+export function listProjects(): Array<{
+  id: number;
+  business_name: string;
+  tagline: string;
+  theme_id: string;
+  mode: string;
+  created_at: string;
+  wp_page_ids: string | null;
+  group_size: number;
+}> {
   const stmt = db().prepare(
-    `SELECT id, business_name, theme_id, created_at FROM sites ORDER BY id DESC`,
+    `SELECT
+       s.id, s.business_name, s.tagline, s.theme_id, s.mode, s.created_at, s.wp_page_ids,
+       (SELECT COUNT(*) FROM sites s2 WHERE s2.site_group_id = s.site_group_id) AS group_size
+     FROM sites s
+     ORDER BY s.id DESC`,
   );
-  return stmt.all() as Array<
-    Pick<ProjectRow, "id" | "business_name" | "theme_id" | "created_at">
-  >;
+  return stmt.all() as Array<{
+    id: number;
+    business_name: string;
+    tagline: string;
+    theme_id: string;
+    mode: string;
+    created_at: string;
+    wp_page_ids: string | null;
+    group_size: number;
+  }>;
 }
 
 /** AC-5: fetch the full project (input + pages) for re-rendering. */
