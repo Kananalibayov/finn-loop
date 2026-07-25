@@ -1,0 +1,49 @@
+# AC-3 (issue #15): keep the Docker build context small and prevent secrets /
+# scratch files from ever entering the image.
+
+# Dependencies (rebuilt inside the image from package-lock).
+node_modules
+
+# Build output (rebuilt inside the image).
+.next
+out
+build
+
+# Version control + editor.
+.git
+.gitignore
+.gitattributes
+
+# Runtime data (compose mounts a volume for /app/data; never bake it in).
+data
+
+# Secrets — must never be in the image. Compose mounts .env read-only.
+.env
+.env.*
+!.env.example
+
+# Local SQLite db + uploads (defensive duplicates of `data`).
+*.db
+data/uploads
+
+# ZCode session/plan scratch (skills are tracked, but not needed at runtime).
+.zcode/plans
+
+# Builder scratch files (PR/issue body drafts).
+.pr-*.md
+.issue-*.md
+
+# Misc.
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+next-env.d.ts
+Dockerfile
+docker-compose.yml
+.dockerignore
+DEPLOY.md
+README.md
+AGENTS.md
