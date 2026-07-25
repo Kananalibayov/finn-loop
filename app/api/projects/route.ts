@@ -1,12 +1,12 @@
-// AC-4 (issue #4): list saved sites newest-first (projection only).
+// AC-4 (issue #4): list saved projects newest-first (projection only).
 
 import { NextResponse } from "next/server";
-import { listSites } from "@/lib/db";
+import { listProjects } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const rows = listSites();
+  const rows = listProjects();
   return NextResponse.json(rows);
 }

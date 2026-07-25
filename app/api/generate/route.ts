@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTheme } from "@/lib/themes";
 import { GenerateRequest, GenerateResponse } from "@/lib/types";
-import { insertSite } from "@/lib/db";
+import { insertProject } from "@/lib/db";
 import { generatePages } from "@/lib/generate";
 
 export const runtime = "nodejs";
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     // Best-effort — a persistence failure must not fail an otherwise-successful
     // generation. The presence of `id` in the response is the save signal.
     try {
-      response.id = insertSite({
+      response.id = insertProject({
         businessName: input.businessName,
         tagline: input.tagline,
         themeId: theme.id,
