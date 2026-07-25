@@ -122,7 +122,7 @@ export default function ConnectionsPage() {
   }
 
   return (
-    <main>
+    <main className="page">
       <header className="app-header">
         <h1>WordPress Connections</h1>
         <p>Manage client WordPress sites. Generate pairing codes for auto-connect via the plugin.</p>
