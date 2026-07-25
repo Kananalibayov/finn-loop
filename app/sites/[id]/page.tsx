@@ -31,6 +31,9 @@ export default function SitePreviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [activePage, setActivePage] = useState(0);
   const [zipping, setZipping] = useState(false);
+  // AC-5 (issue #18): per-button busy states for the two new export formats.
+  const [buildingHtml, setBuildingHtml] = useState(false);
+  const [buildingStatic, setBuildingStatic] = useState(false);
 
   // AC-4 (issue #16): edit & regenerate state.
   const [editing, setEditing] = useState(false);
@@ -78,21 +81,26 @@ export default function SitePreviewPage() {
     return pages[Math.min(activePage, pages.length - 1)]?.html ?? "";
   }, [pages, activePage]);
 
-  async function handleDownload() {
+  // AC-4, AC-5 (issue #18): generic export handler — posts pages to an export
+  // endpoint and triggers a download of the returned blob.
+  async function handleExport(endpoint: string, filename: string, busyKey: "zipping" | "buildingHtml" | "buildingStatic") {
     if (!pages.length) return;
-    setZipping(true);
+    const setter = busyKey === "zipping" ? setZipping
+      : busyKey === "buildingHtml" ? setBuildingHtml
+      : setBuildingStatic;
+    setter(true);
     try {
-      const res = await fetch("/api/zip", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(pages),
       });
-      if (!res.ok) throw new Error("Could not build ZIP.");
+      if (!res.ok) throw new Error(`Export failed (HTTP ${res.status}).`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "generated-site.zip";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -100,7 +108,7 @@ export default function SitePreviewPage() {
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setZipping(false);
+      setter(false);
     }
   }
 
@@ -272,13 +280,27 @@ export default function SitePreviewPage() {
               </button>
             ))}
           </div>
-          <div style={{ marginLeft: "auto" }}>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button
               className="btn-secondary"
-              onClick={handleDownload}
-              disabled={zipping || pages.length === 0}
+              onClick={() => handleExport("/api/zip", "generated-site.zip", "zipping")}
+              disabled={zipping || buildingHtml || buildingStatic || pages.length === 0}
             >
               {zipping ? "Zipping…" : "Download ZIP"}
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => handleExport("/api/export/single-html", "site.html", "buildingHtml")}
+              disabled={zipping || buildingHtml || buildingStatic || pages.length === 0}
+            >
+              {buildingHtml ? "Building…" : "Single HTML"}
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => handleExport("/api/export/static-zip", "static-site.zip", "buildingStatic")}
+              disabled={zipping || buildingHtml || buildingStatic || pages.length === 0}
+            >
+              {buildingStatic ? "Zipping…" : "Static ZIP"}
             </button>
           </div>
         </div>
