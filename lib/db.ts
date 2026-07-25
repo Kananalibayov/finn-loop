@@ -78,6 +78,20 @@ function db(): Database.Database {
       updated_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #32): wp_connections — multi-row table for per-client WP sites.
+  // Replaces the single-row wp_settings approach for multi-client support.
+  // pairing_code is nullable (used by the companion plugin flow later).
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS wp_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      api_url TEXT NOT NULL,
+      username TEXT NOT NULL,
+      app_password TEXT NOT NULL,
+      pairing_code TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
   dbInstance = conn;
   return conn;
 }
@@ -227,5 +241,82 @@ export function updateProjectWpPageIds(
   db()
     .prepare(`UPDATE sites SET wp_page_ids = ? WHERE id = ?`)
     .run(JSON.stringify(wpPageIds), projectId);
+}
+
+// --- WP connections (issue #32: multi-client support) ---
+
+/** Row shape for the wp_connections table. */
+export interface WpConnectionRow {
+  id: number;
+  label: string;
+  api_url: string;
+  username: string;
+  app_password: string;
+  pairing_code: string | null;
+  created_at: string;
+}
+
+/** AC-2: list all WP connections, newest-first. */
+export function listWpConnections(): WpConnectionRow[] {
+  return db()
+    .prepare(`SELECT * FROM wp_connections ORDER BY id DESC`)
+    .all() as WpConnectionRow[];
+}
+
+/** AC-2: get one WP connection by ID, or null. */
+export function getWpConnection(id: number): WpConnectionRow | null {
+  const row = db()
+    .prepare(`SELECT * FROM wp_connections WHERE id = ?`)
+    .get(id);
+  return (row as WpConnectionRow | undefined) ?? null;
+}
+
+/** AC-2: add a new WP connection. Returns the stored row. */
+export function addWpConnection(input: {
+  label: string;
+  apiUrl: string;
+  username: string;
+  appPassword: string;
+}): WpConnectionRow {
+  const now = new Date().toISOString();
+  const info = db()
+    .prepare(
+      `INSERT INTO wp_connections (label, api_url, username, app_password, created_at)
+       VALUES (@label, @apiUrl, @username, @appPassword, @createdAt)`,
+    )
+    .run({
+      label: input.label,
+      apiUrl: input.apiUrl,
+      username: input.username,
+      appPassword: input.appPassword,
+      createdAt: now,
+    });
+  return getWpConnection(Number(info.lastInsertRowid))!;
+}
+
+/** AC-2: update an existing WP connection's fields. */
+export function updateWpConnection(
+  id: number,
+  fields: {
+    label?: string;
+    apiUrl?: string;
+    username?: string;
+    appPassword?: string;
+  },
+): void {
+  const sets: string[] = [];
+  const values: Record<string, unknown> = { id };
+  if (fields.label !== undefined) { sets.push("label = @label"); values.label = fields.label; }
+  if (fields.apiUrl !== undefined) { sets.push("api_url = @apiUrl"); values.apiUrl = fields.apiUrl; }
+  if (fields.username !== undefined) { sets.push("username = @username"); values.username = fields.username; }
+  if (fields.appPassword !== undefined) { sets.push("app_password = @appPassword"); values.appPassword = fields.appPassword; }
+  if (sets.length === 0) return;
+  db().prepare(`UPDATE wp_connections SET ${sets.join(", ")} WHERE id = @id`).run(values);
+}
+
+/** AC-2: delete a WP connection. */
+export function deleteWpConnection(id: number): boolean {
+  const info = db().prepare(`DELETE FROM wp_connections WHERE id = ?`).run(id);
+  return info.changes > 0;
 }
 
