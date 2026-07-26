@@ -113,6 +113,9 @@ export default function TemplatesPage() {
           </div>
           {!showForm && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Link href="/templates/from-scan" className="btn-secondary" style={{ width: "auto", marginTop: 0 }}>
+                🌐 From URL
+              </Link>
               <Link href="/templates/from-screenshot" className="btn-secondary" style={{ width: "auto", marginTop: 0 }}>
                 📷 From screenshot
               </Link>
