@@ -13,6 +13,9 @@ type Connection = {
   username: string;
   hasPassword: boolean;
   createdAt: string;
+  /** AC-2 (#40): true when this connection was auto-created by the plugin
+   *  consuming a pairing code (vs added manually by the operator). */
+  pairedViaCode?: boolean;
 };
 
 type PairingCode = {
@@ -21,10 +24,20 @@ type PairingCode = {
   expiresAt: string;
 };
 
+/** AC-5 (issue #40): per-card test-connection result state. */
+type TestState =
+  | { status: "idle" }
+  | { status: "testing" }
+  | { status: "ok"; username: string; roles: string[] }
+  | { status: "error"; message: string };
+
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // AC-4 (issue #40): per-card busy + test-result state for the card grid.
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [testStates, setTestStates] = useState<Record<number, TestState>>({});
 
   // Pairing state
   const [pairingLabel, setPairingLabel] = useState("");
@@ -112,12 +125,50 @@ export default function ConnectionsPage() {
   }
 
   async function handleDelete(id: number) {
+    // AC-4 (issue #40): optimistic removal + per-card busy state.
+    setDeletingId(id);
     try {
       const res = await fetch(`/api/wp/connections/${id}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) throw new Error(`Delete failed (HTTP ${res.status}).`);
-      await load();
+      setConnections((prev) => prev.filter((c) => c.id !== id));
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  // AC-5 (issue #40): test a connection. Carries forward the #32/#35 caveat —
+  // the safe API projection never returns the password, so a client-side test
+  // without re-entering creds reports "need password". The button remains so
+  // the operator can trigger it; the result renders inline on the card.
+  async function handleTest(conn: Connection) {
+    setTestStates((s) => ({ ...s, [conn.id]: { status: "testing" } }));
+    try {
+      const res = await fetch("/api/wp/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiUrl: conn.apiUrl, username: conn.username, appPassword: "" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        username?: string;
+        roles?: string[];
+        error?: string;
+      };
+      if (data.ok) {
+        setTestStates((s) => ({
+          ...s,
+          [conn.id]: { status: "ok", username: data.username || conn.username, roles: data.roles || [] },
+        }));
+      } else {
+        setTestStates((s) => ({
+          ...s,
+          [conn.id]: { status: "error", message: data.error || "Test requires the password to be re-entered." },
+        }));
+      }
+    } catch (e) {
+      setTestStates((s) => ({ ...s, [conn.id]: { status: "error", message: (e as Error).message } }));
     }
   }
 
@@ -163,51 +214,111 @@ export default function ConnectionsPage() {
         )}
       </section>
 
-      {/* Connections list */}
-      <section className="card">
-        <h2>Connections</h2>
-
-        {loading && <div className="preview-empty">Loading…</div>}
-        {error && <div className="error">{error}</div>}
-
-        {!loading && connections.length === 0 && !showForm && (
-          <div className="preview-empty">
-            No WordPress connections yet.{" "}
-            <button onClick={() => setShowForm(true)} style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: "var(--app-primary)", textDecoration: "underline", fontSize: "inherit",
-            }}>
-              Add one manually →
+      {/* AC-3 (issue #40): connections list — now a responsive card grid. */}
+      <section className="card" style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+          <h2 style={{ margin: 0 }}>Connections</h2>
+          {!showForm && connections.length > 0 && (
+            <button className="btn-secondary" onClick={() => setShowForm(true)}>
+              + Add manually
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {connections.length > 0 && (
-          <ul className="site-list">
-            {connections.map((conn) => (
-              <li key={conn.id} className="site-row">
-                <div className="site-row-main">
-                  <span className="site-row-name">{conn.label}</span>
-                  <span className="site-row-meta">
-                    {conn.username} · {conn.apiUrl.replace(/^https?:\/\//, "").replace(/\/wp-json.*/, "")}
-                  </span>
-                </div>
-                <button className="btn-secondary" onClick={() => handleDelete(conn.id)}>
-                  Delete
+        <div className="dashboard-grid" style={{ marginTop: 16 }}>
+          {loading && (
+            <div className="dashboard-empty">
+              <div className="preview-empty">Loading…</div>
+            </div>
+          )}
+
+          {error && (
+            <div className="dashboard-empty">
+              <div className="error">{error}</div>
+            </div>
+          )}
+
+          {!loading && connections.length === 0 && !showForm && (
+            <div className="dashboard-empty">
+              <div className="preview-empty">
+                No WordPress connections yet.{" "}
+                <button onClick={() => setShowForm(true)} style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "var(--app-primary)", textDecoration: "underline", fontSize: "inherit",
+                }}>
+                  Add one manually →
                 </button>
-              </li>
-            ))}
-          </ul>
-        )}
+              </div>
+            </div>
+          )}
 
-        {!showForm && connections.length > 0 && (
-          <button className="btn-secondary" style={{ marginTop: 16 }} onClick={() => setShowForm(true)}>
-            + Add manually
-          </button>
-        )}
+          {connections.map((conn) => {
+            const ts = testStates[conn.id] || { status: "idle" };
+            return (
+              <article key={conn.id} className="connection-card">
+                {/* AC-4(a): label. */}
+                <h3 className="connection-card-title">{conn.label}</h3>
+                {/* AC-4(b): site host subtitle. */}
+                <p className="connection-card-subtitle">{hostFromUrl(conn.apiUrl)}</p>
 
-        {showForm && (
-          <form onSubmit={handleAdd} style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--app-border)" }}>
+                {/* AC-5: status badges. */}
+                <div className="connection-card-meta">
+                  {conn.pairedViaCode ? (
+                    <span className="badge badge--info">Plugin-paired</span>
+                  ) : (
+                    <span className="badge badge--theme">Manual</span>
+                  )}
+                  {conn.hasPassword ? (
+                    <span className="badge badge--wp-pushed">✓ Credentials</span>
+                  ) : (
+                    <span className="badge badge--warning">No password</span>
+                  )}
+                  <span className="connection-card-date">{formatDate(conn.createdAt)}</span>
+                </div>
+
+                {/* AC-4(d): username meta. */}
+                <div className="connection-card-meta">
+                  <span className="badge badge--theme">{conn.username}</span>
+                </div>
+
+                {/* AC-5: inline test result. */}
+                {ts.status === "ok" && (
+                  <div className="connection-card-test-result notice">
+                    ✓ {ts.username}{ts.roles.length > 0 && ` (${ts.roles.join(", ")})`}
+                  </div>
+                )}
+                {ts.status === "error" && (
+                  <div className="connection-card-test-result error">{ts.message}</div>
+                )}
+
+                {/* AC-4(e): actions. */}
+                <div className="connection-card-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleTest(conn)}
+                    disabled={ts.status === "testing"}
+                  >
+                    {ts.status === "testing" ? "Testing…" : "Test"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleDelete(conn.id)}
+                    disabled={deletingId === conn.id}
+                  >
+                    {deletingId === conn.id ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      {showForm && (
+        <section className="card">
+          <form onSubmit={handleAdd}>
             <h2>Add Connection Manually</h2>
             <label htmlFor="label">Label</label>
             <input id="label" type="text" required value={form.label}
@@ -230,8 +341,28 @@ export default function ConnectionsPage() {
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </form>
-        )}
-      </section>
+        </section>
+      )}
     </main>
   );
+}
+
+/** AC-4(b) (issue #40): extract the host from a WP REST API URL for the card
+ *  subtitle. Strips the scheme and any trailing /wp-json path. Falls back to
+ *  the raw string if parsing fails. */
+function hostFromUrl(apiUrl: string): string {
+  return apiUrl.replace(/^https?:\/\//, "").replace(/\/wp-json.*/, "");
+}
+
+/** ISO -> human-readable date. Falls back to the raw string on parse failure. */
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
