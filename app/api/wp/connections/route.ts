@@ -16,6 +16,12 @@ function safeConnection(c: {
   created_at: string;
   /** Absent for freshly-inserted rows (addWpConnection return); defaults to 0. */
   paired_via_code?: number;
+  /** AC-4 (issue #62): health fields — null until first report. */
+  wp_version?: string | null;
+  theme_name?: string | null;
+  plugin_count?: number | null;
+  health_score?: number | null;
+  health_reported_at?: string | null;
 }) {
   return {
     id: c.id,
@@ -25,6 +31,12 @@ function safeConnection(c: {
     hasPassword: Boolean(c.app_password),
     createdAt: c.created_at,
     pairedViaCode: (c.paired_via_code ?? 0) > 0,
+    // AC-4 (issue #62): health projection. health_secret is NEVER returned.
+    wpVersion: c.wp_version ?? null,
+    themeName: c.theme_name ?? null,
+    pluginCount: c.plugin_count ?? null,
+    healthScore: c.health_score ?? null,
+    healthReportedAt: c.health_reported_at ?? null,
   };
 }
 
