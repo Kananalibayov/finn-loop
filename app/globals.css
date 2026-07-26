@@ -970,3 +970,198 @@ textarea:focus {
   color: var(--app-warning);
   border-color: var(--app-warning);
 }
+
+/* ---- Client onboarding wizard (issue #42) ---- */
+
+.wizard {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* Stepper header. */
+.wizard-steps {
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+}
+
+.wizard-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-bg);
+  color: var(--app-muted);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.wizard-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.wizard-step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wizard-step.active {
+  border-color: var(--app-primary);
+  color: var(--app-primary);
+  background: #eff6ff;
+}
+
+.wizard-step.active .wizard-step-num {
+  background: var(--app-primary);
+  color: #fff;
+  border-color: var(--app-primary);
+}
+
+.wizard-step.done {
+  color: var(--app-success);
+  border-color: var(--app-success);
+  background: var(--app-success-bg);
+}
+
+.wizard-step.done .wizard-step-num {
+  background: var(--app-success);
+  color: #fff;
+  border-color: var(--app-success);
+}
+
+.wizard-body {
+  min-height: 200px;
+}
+
+/* Connect-method option cards. */
+.wizard-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 560px) {
+  .wizard-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.wizard-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--app-text);
+}
+
+.wizard-option:hover {
+  background: var(--app-bg);
+}
+
+.wizard-option.selected {
+  border-color: var(--app-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.wizard-option strong {
+  font-size: 14px;
+}
+
+.wizard-option .hint {
+  font-size: 12px;
+  color: var(--app-muted);
+}
+
+.wizard-subform {
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-bg);
+  margin-bottom: 16px;
+}
+
+/* Large pairing-code display. */
+.wizard-code-display {
+  text-align: center;
+}
+
+.wizard-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 16px;
+  background: var(--app-surface);
+  border: 1px dashed var(--app-primary);
+  border-radius: 8px;
+  color: var(--app-primary);
+  margin-bottom: 12px;
+  user-select: all;
+}
+
+/* Action button row. */
+.wizard-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+.wizard-actions .btn-primary,
+.wizard-actions .btn-secondary {
+  width: auto;
+  margin-top: 0;
+}
+
+.wizard-actions .btn-primary {
+  min-width: 140px;
+}
+
+/* Step 3 summary. */
+.wizard-done .wizard-summary {
+  margin: 0 0 8px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+}
+
+.wizard-done .wizard-summary dt {
+  color: var(--app-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wizard-done .wizard-summary dd {
+  margin: 0;
+  font-size: 14px;
+}
+
+.wizard-done .wizard-summary code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--app-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+}

@@ -5,6 +5,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 type Connection = {
   id: number;
@@ -218,11 +219,14 @@ export default function ConnectionsPage() {
       <section className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ margin: 0 }}>Connections</h2>
-          {!showForm && connections.length > 0 && (
-            <button className="btn-secondary" onClick={() => setShowForm(true)}>
-              + Add manually
-            </button>
-          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/onboard" className="btn-primary">+ Onboard client</Link>
+            {!showForm && connections.length > 0 && (
+              <button className="btn-secondary" onClick={() => setShowForm(true)}>
+                + Add manually
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="dashboard-grid" style={{ marginTop: 16 }}>

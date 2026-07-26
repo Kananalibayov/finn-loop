@@ -34,7 +34,10 @@ type NavGroup = {
 const GROUPS: NavGroup[] = [
   {
     label: "Create",
-    items: [{ href: "/", label: "Generator", icon: "✨" }],
+    items: [
+      { href: "/", label: "Generator", icon: "✨" },
+      { href: "/onboard", label: "Onboard client", icon: "➕" },
+    ],
   },
   {
     label: "Manage",
