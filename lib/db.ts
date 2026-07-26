@@ -7,6 +7,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { BUILTIN_TEMPLATES } from "@/lib/builtin-templates";
 
 export interface ProjectRow {
   id: number;
@@ -124,8 +125,51 @@ function db(): Database.Database {
       updated_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #51): templates — the template library. Hybrid model:
+  // spec_json holds the design spec (CSS vars + voice), pages_json holds
+  // optional frozen HTML (Record<PageKey, html>); either or both may be set.
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL,
+      spec_json TEXT NOT NULL,
+      pages_json TEXT,
+      source TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+  // AC-2 (issue #51): seed built-in starter templates (idempotent — only
+  // inserts builtins whose name isn't already present).
+  seedBuiltinTemplates(conn);
   dbInstance = conn;
   return conn;
+}
+
+/** AC-2 (issue #51): idempotently insert the built-in starter templates.
+ *  Called from db() after the schema is created. Safe to re-run. */
+function seedBuiltinTemplates(conn: Database.Database): void {
+  const existing = conn
+    .prepare(`SELECT name FROM templates WHERE source = 'builtin'`)
+    .all() as Array<{ name: string }>;
+  const have = new Set(existing.map((r) => r.name));
+  const now = new Date().toISOString();
+  const stmt = conn.prepare(
+    `INSERT INTO templates (name, description, category, spec_json, pages_json, source, created_at)
+     VALUES (@name, @description, @category, @spec_json, @pages_json, 'builtin', @created_at)`,
+  );
+  for (const t of BUILTIN_TEMPLATES) {
+    if (have.has(t.name)) continue;
+    stmt.run({
+      name: t.name,
+      description: t.description,
+      category: t.category,
+      spec_json: t.specJson,
+      pages_json: t.pagesJson,
+      created_at: now,
+    });
+  }
 }
 
 /** AC-3: insert a generated project, returns its new id.
@@ -532,5 +576,66 @@ export function getEffectiveGenerationModel(): string {
   const dbModel = getAppSettings()?.generation_model ?? "";
   if (dbModel) return dbModel;
   return process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+}
+
+// --- Templates (issue #51: template library) ---
+
+/** AC-1 (issue #51): row shape for the templates table. */
+export interface TemplateRow {
+  id: number;
+  name: string;
+  description: string;
+  category: string;
+  spec_json: string;
+  pages_json: string | null;
+  source: string;
+  created_at: string;
+}
+
+/** AC-1: list all templates newest-first. */
+export function listTemplates(): TemplateRow[] {
+  return db()
+    .prepare(`SELECT * FROM templates ORDER BY id DESC`)
+    .all() as TemplateRow[];
+}
+
+/** AC-1: get one template by id, or null. */
+export function getTemplate(id: number): TemplateRow | null {
+  const row = db().prepare(`SELECT * FROM templates WHERE id = ?`).get(id);
+  return (row as TemplateRow | undefined) ?? null;
+}
+
+/** AC-1: insert a template. Returns the stored row. */
+export function insertTemplate(input: {
+  name: string;
+  description: string;
+  category: string;
+  specJson: string;
+  pagesJson: string | null;
+  source: string;
+}): TemplateRow {
+  const now = new Date().toISOString();
+  const info = db()
+    .prepare(
+      `INSERT INTO templates (name, description, category, spec_json, pages_json, source, created_at)
+       VALUES (@name, @description, @category, @spec_json, @pages_json, @source, @created_at)`,
+    )
+    .run({
+      name: input.name,
+      description: input.description,
+      category: input.category,
+      spec_json: input.specJson,
+      pages_json: input.pagesJson,
+      source: input.source,
+      created_at: now,
+    });
+  return getTemplate(Number(info.lastInsertRowid))!;
+}
+
+/** AC-1: delete a template. Returns true if a row was deleted.
+ *  NOTE: callers must refuse builtin deletions at the API layer (AC-5). */
+export function deleteTemplate(id: number): boolean {
+  const info = db().prepare(`DELETE FROM templates WHERE id = ?`).run(id);
+  return info.changes > 0;
 }
 

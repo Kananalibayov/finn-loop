@@ -888,6 +888,20 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 
+/* ---- Template library (issue #51) ---- */
+/* Mirrors .project-card so it reads consistently in the dashboard grid. */
+.template-card {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  padding: 16px;
+  box-shadow: var(--app-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
 /* ---- Dashboard home (issue #48) ---- */
 
 /* AC-3: stat cards. Responsive: 2 cols < 720px, 4 cols >= 720px. */
