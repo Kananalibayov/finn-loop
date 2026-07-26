@@ -888,6 +888,99 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 
+/* ---- Dashboard home (issue #48) ---- */
+
+/* AC-3: stat cards. Responsive: 2 cols < 720px, 4 cols >= 720px. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 720px) {
+  .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.stat-card {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  padding: 16px;
+  box-shadow: var(--app-shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.stat-card-icon {
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.stat-card-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--app-text);
+  line-height: 1.1;
+}
+
+.stat-card-label {
+  font-size: 12px;
+  color: var(--app-muted);
+  margin-top: 2px;
+}
+
+/* AC-4: quick-action cards. */
+.quick-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 4px;
+}
+
+@media (min-width: 560px) {
+  .quick-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.quick-action {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  text-decoration: none;
+  color: var(--app-text);
+  cursor: pointer;
+  transition: border-color 0.1s, box-shadow 0.1s;
+}
+
+.quick-action:hover {
+  border-color: var(--app-primary);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.quick-action-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.quick-action strong {
+  font-size: 14px;
+}
+
+.quick-action .hint {
+  font-size: 12px;
+  color: var(--app-muted);
+}
+
 /* ---- Connections dashboard — rich connector cards (issue #40) ---- */
 /* Mirrors .project-card so the two dashboards read consistently. */
 

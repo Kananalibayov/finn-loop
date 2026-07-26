@@ -1,401 +1,195 @@
+// AC-2..AC-5, AC-7 (issue #48): operator dashboard home.
+// Replaces the old "/" (which was the Generator form, now at /generate).
+// Shows: stat cards (counts), quick-action entry points, and the 6 most
+// recent projects. Consumes only existing /api/projects + /api/wp/connections.
+
 "use client";
 
-import { useMemo, useState } from "react";
-import { THEMES, ThemeId } from "@/lib/themes";
-import { BusinessInput, GenerateResponse, Mode } from "@/lib/types";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
-type Status = "idle" | "loading" | "done" | "error";
+type ProjectListItem = {
+  id: number;
+  business_name: string;
+  tagline: string;
+  theme_id: string;
+  created_at: string;
+  wp_page_ids: string | null;
+  group_size: number;
+};
 
-export default function HomePage() {
-  // AC-1: form fields
-  const [input, setInput] = useState<BusinessInput>({
-    businessName: "",
-    tagline: "",
-    description: "",
-    services: [],
-    phone: "",
-    email: "",
-    address: "",
-    logoUrl: "",
-    brandColors: "",
-  });
-  const [servicesText, setServicesText] = useState("");
-  // AC-2: mode selector
-  const [mode, setMode] = useState<Mode>("full");
-  // AC-3: theme picker
-  const [themeId, setThemeId] = useState<ThemeId>("minimal");
+type Connection = {
+  id: number;
+  label: string;
+  pairedViaCode?: boolean;
+};
 
-  const [status, setStatus] = useState<Status>("idle");
+type LoadState = "loading" | "ready" | "error";
+
+export default function DashboardPage() {
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<GenerateResponse | null>(null);
-  const [activePage, setActivePage] = useState(0);
-  const [zipping, setZipping] = useState(false);
-  // AC-5 (issue #18): per-button busy states for the two new export formats.
-  const [buildingHtml, setBuildingHtml] = useState(false);
-  const [buildingStatic, setBuildingStatic] = useState(false);
-  // AC-5, AC-6 (issue #17): logo upload state.
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [logoName, setLogoName] = useState<string>("");
 
-  function set<K extends keyof BusinessInput>(key: K, value: BusinessInput[K]) {
-    setInput((s) => ({ ...s, [key]: value }));
-  }
-
-  // AC-5 (issue #17): upload the selected logo file, store the returned URL.
-  async function handleLogoUpload(file: File | undefined) {
-    if (!file) return;
-    setUploading(true);
-    setUploadError(null);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/uploads/logo", { method: "POST", body: form });
-      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
-        throw new Error(data?.error || `Upload failed (HTTP ${res.status}).`);
-      }
-      set("logoUrl", data.url);
-      setLogoName(file.name);
-    } catch (e) {
-      setUploadError((e as Error).message);
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  const canSubmit =
-    status !== "loading" && input.businessName.trim().length > 0;
-
-  async function handleGenerate() {
-    setStatus("loading");
+  async function load() {
+    setState("loading");
     setError(null);
-    setResult(null);
-    setActivePage(0);
-
-    // Parse the services textarea into a list (one per non-empty line).
-    const services = servicesText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
     try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          input: { ...input, services },
-          mode,
-          themeId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || `Generation failed (HTTP ${res.status}).`);
-      }
-      setResult(data as GenerateResponse);
-      setStatus("done");
-    } catch (e) {
-      setError((e as Error).message || "Generation failed.");
-      setStatus("error");
-    }
-  }
-
-  // AC-4, AC-5 (issue #18): generic export handler — posts pages to an export
-  // endpoint and triggers a download of the returned blob. Used by all three
-  // buttons (ZIP, Single HTML, Static ZIP).
-  async function handleExport(endpoint: string, filename: string, busyKey: "zipping" | "buildingHtml" | "buildingStatic") {
-    if (!result) return;
-    const setter = busyKey === "zipping" ? setZipping
-      : busyKey === "buildingHtml" ? setBuildingHtml
-      : setBuildingStatic;
-    setter(true);
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(result.pages),
-      });
-      if (!res.ok) throw new Error(`Export failed (HTTP ${res.status}).`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const [pRes, cRes] = await Promise.all([
+        fetch("/api/projects", { cache: "no-store" }),
+        fetch("/api/wp/connections", { cache: "no-store" }),
+      ]);
+      if (!pRes.ok) throw new Error(`Projects fetch failed (HTTP ${pRes.status}).`);
+      if (!cRes.ok) throw new Error(`Connections fetch failed (HTTP ${cRes.status}).`);
+      const pData = (await pRes.json()) as ProjectListItem[];
+      const cData = (await cRes.json()) as Connection[];
+      setProjects(pData);
+      setConnections(cData);
+      setState("ready");
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setter(false);
+      setState("error");
     }
   }
 
-  const previewDoc = useMemo(() => {
-    if (!result?.pages?.length) return "";
-    return result.pages[Math.min(activePage, result.pages.length - 1)]?.html ?? "";
-  }, [result, activePage]);
+  useEffect(() => {
+    load();
+  }, []);
+
+  // AC-3: derived stats.
+  const pushedCount = projects.filter(
+    (p) => p.wp_page_ids !== null && p.wp_page_ids !== "",
+  ).length;
+  const pairedCount = connections.filter((c) => c.pairedViaCode === true).length;
+  const recent = projects.slice(0, 6); // newest-first already
 
   return (
-    <div className="page">
+    <main className="page">
       <header className="app-header">
-        <h1>AI Website Generator</h1>
-        <p>Enter business info. Get a 5-page website you can preview and download.</p>
+        <h1>Dashboard</h1>
+        <p>Overview of your agency&apos;s sites and connections.</p>
       </header>
 
-      <div className="grid">
-        {/* ---------------- Left: form ---------------- */}
-        <section className="card">
-          <h2>Business info</h2>
+      {/* AC-3: stat cards */}
+      <div className="stat-grid">
+        <StatCard icon="📁" label="Total projects" value={state === "ready" ? projects.length : null} />
+        <StatCard icon="🔗" label="WP connections" value={state === "ready" ? connections.length : null} />
+        <StatCard icon="✓" label="Pushed to WP" value={state === "ready" ? pushedCount : null} />
+        <StatCard icon="🔌" label="Plugin-paired" value={state === "ready" ? pairedCount : null} />
+      </div>
 
-          <label htmlFor="bn">Business name *</label>
-          <input
-            id="bn"
-            type="text"
-            value={input.businessName}
-            onChange={(e) => set("businessName", e.target.value)}
-            placeholder="Sunrise Coffee"
-          />
+      {/* AC-4: quick actions (no data dependency — always render) */}
+      <section className="card" style={{ marginTop: 16 }}>
+        <h2>Quick actions</h2>
+        <div className="quick-actions">
+          <Link href="/generate" className="quick-action">
+            <span className="quick-action-icon" aria-hidden="true">✨</span>
+            <strong>Generate a site</strong>
+            <span className="hint">Create a new 5-page site from business info.</span>
+          </Link>
+          <Link href="/onboard" className="quick-action">
+            <span className="quick-action-icon" aria-hidden="true">➕</span>
+            <strong>Onboard a client</strong>
+            <span className="hint">Guided setup: client info + connect their WordPress.</span>
+          </Link>
+          <Link href="/connections" className="quick-action">
+            <span className="quick-action-icon" aria-hidden="true">🔗</span>
+            <strong>Manage connections</strong>
+            <span className="hint">View, test, and manage client WP sites.</span>
+          </Link>
+        </div>
+      </section>
 
-          <label htmlFor="tg">Tagline</label>
-          <input
-            id="tg"
-            type="text"
-            value={input.tagline}
-            onChange={(e) => set("tagline", e.target.value)}
-            placeholder="Fresh roast daily"
-          />
-
-          <label htmlFor="ds">Description</label>
-          <textarea
-            id="ds"
-            value={input.description}
-            onChange={(e) => set("description", e.target.value)}
-            placeholder="A neighborhood coffee shop serving single-origin espresso, pastries, and a calm place to work."
-          />
-
-          <label htmlFor="sv">Services <span className="hint">(one per line)</span></label>
-          <textarea
-            id="sv"
-            value={servicesText}
-            onChange={(e) => setServicesText(e.target.value)}
-            placeholder={"Espresso bar\nFresh pastries\nCoffee subscriptions"}
-          />
-
-          <label htmlFor="ph">Phone</label>
-          <input
-            id="ph"
-            type="tel"
-            value={input.phone}
-            onChange={(e) => set("phone", e.target.value)}
-            placeholder="+1 (555) 010-2030"
-          />
-
-          <label htmlFor="em">Email</label>
-          <input
-            id="em"
-            type="email"
-            value={input.email}
-            onChange={(e) => set("email", e.target.value)}
-            placeholder="hello@sunrisecoffee.com"
-          />
-
-          <label htmlFor="ad">Address</label>
-          <textarea
-            id="ad"
-            value={input.address}
-            onChange={(e) => set("address", e.target.value)}
-            placeholder={"123 Market St\nSpringfield, CA 90001"}
-          />
-
-          {/* AC-5 (issue #17): logo upload widget (replaces the old URL field). */}
-          <label htmlFor="lg">Logo <span className="hint">(optional — upload a file)</span></label>
-          <div className="logo-upload">
-            <input
-              id="lg"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => handleLogoUpload(e.target.files?.[0])}
-              disabled={uploading}
-              style={{ display: "none" }}
-            />
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => document.getElementById("lg")?.click()}
-              disabled={uploading}
-            >
-              {uploading ? "Uploading…" : "Choose logo file"}
-            </button>
-            {logoName && !uploading && (
-              <span className="logo-name">✓ {logoName}</span>
-            )}
-            {input.logoUrl && !logoName && (
-              <span className="logo-name hint">(existing logo set)</span>
-            )}
-          </div>
-          {uploadError && (
-            <div className="error" style={{ marginTop: 8 }}>{uploadError}</div>
+      {/* AC-5: recent projects */}
+      <section style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h2 style={{ margin: 0 }}>Recent projects</h2>
+          {state === "ready" && projects.length > 0 && (
+            <Link href="/projects" className="app-nav-link">View all →</Link>
           )}
+        </div>
 
-          <label htmlFor="bc">Brand colors <span className="hint">(optional, e.g. "#1d4ed8, warm earth tones")</span></label>
-          <input
-            id="bc"
-            type="text"
-            value={input.brandColors}
-            onChange={(e) => set("brandColors", e.target.value)}
-            placeholder="leave blank to use theme defaults"
-          />
+        {state === "loading" && (
+          <div className="card"><div className="preview-empty">Loading…</div></div>
+        )}
 
-          {/* AC-2 */}
-          <label>Generation mode</label>
-          <div className="segmented" role="tablist" aria-label="Generation mode">
-            <button
-              type="button"
-              className={mode === "full" ? "active" : ""}
-              onClick={() => setMode("full")}
-            >
-              Full site (5 pages)
-            </button>
-            <button
-              type="button"
-              className={mode === "home" ? "active" : ""}
-              onClick={() => setMode("home")}
-            >
-              Homepage only
-            </button>
-          </div>
-
-          {/* AC-3 */}
-          <label>Theme</label>
-          <div className="theme-grid">
-            {THEMES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`theme-card ${themeId === t.id ? "active" : ""}`}
-                onClick={() => setThemeId(t.id)}
-                title={t.description}
-              >
-                <div
-                  className="theme-swatch"
-                  style={{
-                    background: `linear-gradient(90deg, ${t.vars["--color-bg"]} 0 33%, ${t.vars["--color-primary"]} 33% 66%, ${t.vars["--color-surface"]} 66%)`,
-                  }}
-                />
-                <span className="name">{t.name.split(" ")[0]}</span>
-                <span className="desc">{t.name.replace(/^[^(]*\(/, "").replace(/\)$/, "")}</span>
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={handleGenerate}
-            disabled={!canSubmit}
-          >
-            {status === "loading" ? (
-              <>
-                <span className="spinner" />
-                Generating…
-              </>
-            ) : (
-              `Generate ${mode === "full" ? "5-page site" : "homepage"}`
-            )}
-          </button>
-
-          {/* AC-4 / AC-9 */}
-          {status === "error" && error && (
+        {state === "error" && (
+          <div className="card">
             <div className="error">
-              {error}
+              {error || "Could not load dashboard."}
               <div style={{ marginTop: 8 }}>
-                <button className="btn-secondary" onClick={handleGenerate}>
-                  Try again
-                </button>
+                <button className="btn-secondary" onClick={load}>Try again</button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {status === "done" && result?.defaultsApplied && (
-            <div className="notice">
-              {result.defaultsApplied.logo || result.defaultsApplied.colors
-                ? "Used sensible defaults for: " +
-                  [
-                    result.defaultsApplied.logo ? "logo" : null,
-                    result.defaultsApplied.colors ? "colors" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") +
-                  "."
-                : "Used your logo and brand colors."}
-            </div>
-          )}
-        </section>
-
-        {/* ---------------- Right: preview ---------------- */}
-        <section className="card">
-          <h2>Preview</h2>
-
-          {status !== "done" || !result ? (
+        {state === "ready" && projects.length === 0 && (
+          <div className="card">
             <div className="preview-empty">
-              {status === "loading"
-                ? "Generating pages… this can take 20–60 seconds."
-                : "Your generated site will appear here."}
+              No projects yet.{" "}
+              <Link href="/generate" className="app-nav-link">Generate one →</Link>
             </div>
-          ) : (
-            <>
-              <div className="preview-toolbar">
-                <div className="preview-tabs">
-                  {result.pages.map((p, i) => (
-                    <button
-                      key={p.key}
-                      className={`preview-tab ${i === activePage ? "active" : ""}`}
-                      onClick={() => setActivePage(i)}
-                    >
-                      {p.title}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                  {/* AC-4, AC-5, AC-6 (issue #18): three export buttons. */}
-                  <button
-                    className="btn-secondary"
-                    onClick={() => handleExport("/api/zip", "generated-site.zip", "zipping")}
-                    disabled={zipping || buildingHtml || buildingStatic || !result}
-                  >
-                    {zipping ? "Zipping…" : "Download ZIP"}
-                  </button>
-                  <button
-                    className="btn-secondary"
-                    onClick={() => handleExport("/api/export/single-html", "site.html", "buildingHtml")}
-                    disabled={zipping || buildingHtml || buildingStatic || !result}
-                  >
-                    {buildingHtml ? "Building…" : "Single HTML"}
-                  </button>
-                  <button
-                    className="btn-secondary"
-                    onClick={() => handleExport("/api/export/static-zip", "static-site.zip", "buildingStatic")}
-                    disabled={zipping || buildingHtml || buildingStatic || !result}
-                  >
-                    {buildingStatic ? "Zipping…" : "Static ZIP"}
-                  </button>
-                </div>
-              </div>
-              <div className="preview-frame-wrap">
-                <iframe
-                  key={activePage}
-                  title="preview"
-                  className="preview-frame"
-                  srcDoc={previewDoc}
-                />
-              </div>
-            </>
-          )}
-        </section>
+          </div>
+        )}
+
+        {state === "ready" && recent.length > 0 && (
+          <div className="dashboard-grid">
+            {recent.map((p) => {
+              const pushed = p.wp_page_ids !== null && p.wp_page_ids !== "";
+              const multiVersion = p.group_size > 1;
+              return (
+                <article key={p.id} className="project-card">
+                  <Link href={`/projects/${p.id}`} className="project-card-title">
+                    {p.business_name || "(untitled)"}
+                  </Link>
+                  {p.tagline && <p className="project-card-subtitle">{p.tagline}</p>}
+                  <div className="project-card-meta">
+                    <span className="badge badge--theme">{p.theme_id}</span>
+                    {pushed ? (
+                      <span className="badge badge--wp-pushed">✓ Pushed</span>
+                    ) : (
+                      <span className="badge badge--wp-local">Local</span>
+                    )}
+                    {multiVersion && (
+                      <span className="badge badge--version">v{p.group_size}</span>
+                    )}
+                    <span className="project-card-date">{formatDate(p.created_at)}</span>
+                  </div>
+                  <div className="project-card-actions">
+                    <Link href={`/projects/${p.id}`} className="btn-primary">Open</Link>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
+/** AC-3: a single stat card. value=null renders a placeholder dash while loading. */
+function StatCard({ icon, label, value }: { icon: string; label: string; value: number | null }) {
+  return (
+    <div className="stat-card">
+      <span className="stat-card-icon" aria-hidden="true">{icon}</span>
+      <div>
+        <div className="stat-card-value">{value === null ? "—" : value}</div>
+        <div className="stat-card-label">{label}</div>
       </div>
     </div>
   );
+}
+
+/** ISO -> human-readable date. Falls back to the raw string on parse failure. */
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }

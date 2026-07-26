@@ -35,7 +35,8 @@ const GROUPS: NavGroup[] = [
   {
     label: "Create",
     items: [
-      { href: "/", label: "Generator", icon: "✨" },
+      { href: "/", label: "Dashboard", icon: "🏠" },
+      { href: "/generate", label: "Generator", icon: "✨" },
       { href: "/onboard", label: "Onboard client", icon: "➕" },
     ],
   },
