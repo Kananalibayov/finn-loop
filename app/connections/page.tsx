@@ -39,6 +39,8 @@ export default function ConnectionsPage() {
   // AC-4 (issue #40): per-card busy + test-result state for the card grid.
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [testStates, setTestStates] = useState<Record<number, TestState>>({});
+  // AC-4 (issue #61): SSO login button state (per-card).
+  const [loginId, setLoginId] = useState<number | null>(null);
 
   // Pairing state
   const [pairingLabel, setPairingLabel] = useState("");
@@ -136,6 +138,25 @@ export default function ConnectionsPage() {
       setError((e as Error).message);
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  // AC-4 (issue #61): SSO auto-login — request a single-use token, open the
+  // plugin's login endpoint in a new tab.
+  async function handleLogin(conn: Connection) {
+    setLoginId(conn.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/wp/connections/${conn.id}/login-token`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { loginUrl?: string; error?: string };
+      if (!res.ok || !data.loginUrl) {
+        throw new Error(data?.error || `Login token failed (HTTP ${res.status}).`);
+      }
+      window.open(data.loginUrl, "_blank");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoginId(null);
     }
   }
 
@@ -297,6 +318,17 @@ export default function ConnectionsPage() {
 
                 {/* AC-4(e): actions. */}
                 <div className="connection-card-actions">
+                  {conn.pairedViaCode && (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => handleLogin(conn)}
+                      disabled={loginId === conn.id}
+                      title="Open this client's WP admin in a new tab (single-use token, expires in 5 min)"
+                    >
+                      {loginId === conn.id ? "Opening…" : "Log into WP"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn-secondary"
