@@ -112,9 +112,14 @@ export default function TemplatesPage() {
             <p>Reusable designs for fast, consistent client delivery.</p>
           </div>
           {!showForm && (
-            <button className="btn-primary" style={{ width: "auto", marginTop: 0 }} onClick={() => setShowForm(true)}>
-              + Upload template
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Link href="/templates/from-screenshot" className="btn-secondary" style={{ width: "auto", marginTop: 0 }}>
+                📷 From screenshot
+              </Link>
+              <button className="btn-primary" style={{ width: "auto", marginTop: 0 }} onClick={() => setShowForm(true)}>
+                + Upload template
+              </button>
+            </div>
           )}
         </div>
       </header>
