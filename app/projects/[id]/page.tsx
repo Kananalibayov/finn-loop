@@ -16,6 +16,15 @@ type FullProject = {
   pages_json: string;
   input_json: string;
   created_at: string;
+  /** AC-3 (issue #44): linked connection id, null if unlinked. */
+  wp_connection_id?: number | null;
+};
+
+/** AC-6 (issue #44): a connection in the picker list. */
+type ConnectionOption = {
+  id: number;
+  label: string;
+  apiUrl: string;
 };
 
 type Status = "loading" | "ready" | "not-found" | "error";
@@ -37,6 +46,12 @@ export default function ProjectPreviewPage() {
   // AC-6 (issue #30): push-to-WP state.
   const [pushing, setPushing] = useState(false);
   const [pushResult, setPushResult] = useState<string | null>(null);
+
+  // AC-6 (issue #44): connection picker state.
+  const [connections, setConnections] = useState<ConnectionOption[]>([]);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<number | "">(project?.wp_connection_id ?? "");
+  const [linking, setLinking] = useState(false);
+  const [linkResult, setLinkResult] = useState<string | null>(null);
 
   // AC-4 (issue #16): edit & regenerate state.
   const [editing, setEditing] = useState(false);
@@ -64,6 +79,8 @@ export default function ProjectPreviewPage() {
         if (cancelled) return;
         setProject(data);
         setPages(parsed);
+        // AC-6 (issue #44): pre-fill the connection picker with the project's link.
+        setSelectedConnectionId(data.wp_connection_id ?? "");
         // AC-4 (issue #16): pre-fill the edit form from the saved input.
         setEditInput(safeParseInput(data.input_json));
         setStatus("ready");
@@ -78,6 +95,67 @@ export default function ProjectPreviewPage() {
       cancelled = true;
     };
   }, [id]);
+
+  // AC-6 (issue #44): load the connection list for the picker.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/wp/connections", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as ConnectionOption[];
+        if (!cancelled) setConnections(data);
+      } catch {
+        // Non-fatal — picker just won't populate; the project still renders.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // AC-6 (issue #44): link/unlink the project to a connection.
+  async function handleLink() {
+    if (!id) return;
+    setLinking(true);
+    setLinkResult(null);
+    setError(null);
+    const connectionId =
+      selectedConnectionId === "" ? null : Number(selectedConnectionId);
+    try {
+      const res = await fetch(`/api/projects/${id}/connection`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connectionId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        throw new Error(data?.error || `Link failed (HTTP ${res.status}).`);
+      }
+      // Reflect the change locally.
+      setProject((prev) =>
+        prev ? { ...prev, wp_connection_id: data.ok ? connectionId : prev.wp_connection_id } : prev,
+      );
+      setLinkResult(
+        connectionId === null
+          ? "Unlinked — pushes to legacy settings."
+          : "Linked — pushes to the selected connection.",
+      );
+      setTimeout(() => setLinkResult(null), 4000);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  // AC-7 (issue #44): compute the current push-target hint.
+  const currentTargetHint = useMemo(() => {
+    if (!project) return "";
+    if (project.wp_connection_id == null) return "Pushes to: legacy settings (Settings page)";
+    const conn = connections.find((c) => c.id === project.wp_connection_id);
+    return conn ? `Pushes to: ${conn.label}` : "Pushes to: linked connection";
+  }, [project, connections]);
 
   const previewDoc = useMemo(() => {
     if (!pages.length) return "";
@@ -226,6 +304,43 @@ export default function ProjectPreviewPage() {
           </button>
         </div>
       </div>
+
+      {/* AC-6, AC-7 (issue #44): connection picker + push-target hint. */}
+      <section className="card" style={{ marginBottom: 12, padding: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <label htmlFor="conn" style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>
+            Push target
+          </label>
+          <select
+            id="conn"
+            value={selectedConnectionId}
+            onChange={(e) => setSelectedConnectionId(e.target.value === "" ? "" : Number(e.target.value))}
+            style={{ flex: "1 1 220px", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--app-border)", fontSize: 14, background: "#fff", color: "var(--app-text)" }}
+          >
+            <option value="">None (use legacy settings)</option>
+            {connections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleLink}
+            disabled={linking}
+            style={{ width: "auto", marginTop: 0 }}
+          >
+            {linking ? "Linking…" : "Link"}
+          </button>
+        </div>
+        <div className="hint" style={{ marginTop: 8, fontSize: 13 }}>
+          {currentTargetHint}
+        </div>
+        {linkResult && (
+          <div className="notice" style={{ marginTop: 8, fontSize: 13 }}>{linkResult}</div>
+        )}
+      </section>
 
       {/* AC-6 (issue #30): push result inline. */}
       {pushResult && (

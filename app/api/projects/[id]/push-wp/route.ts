@@ -2,7 +2,7 @@
 // First push creates 5 pages; re-push updates them by stored WP page ID.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getProject, updateProjectWpPageIds, getWpSettings } from "@/lib/db";
+import { getProject, updateProjectWpPageIds, getWpSettings, getWpConnection } from "@/lib/db";
 import { WpClient } from "@/lib/wp";
 import type { GeneratedPage, PageKey } from "@/lib/types";
 
@@ -34,11 +34,37 @@ export async function POST(
     return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
 
-  // AC-7: check WP creds are configured.
-  const wpSettings = getWpSettings();
-  if (!wpSettings) {
+  // AC-5 (issue #44): resolve the push target with precedence:
+  //  (1) the project's linked wp_connections row (if set + still exists), else
+  //  (2) the legacy wp_settings row (backward compat for unlinked projects).
+  let creds: { apiUrl: string; username: string; appPassword: string } | null = null;
+
+  if (project.wp_connection_id != null) {
+    const conn = getWpConnection(project.wp_connection_id);
+    if (conn) {
+      creds = {
+        apiUrl: conn.api_url,
+        username: conn.username,
+        appPassword: conn.app_password,
+      };
+    }
+    // If the linked connection was deleted, fall through to legacy below.
+  }
+
+  if (!creds) {
+    const wpSettings = getWpSettings();
+    if (wpSettings) {
+      creds = {
+        apiUrl: wpSettings.api_url,
+        username: wpSettings.username,
+        appPassword: wpSettings.app_password,
+      };
+    }
+  }
+
+  if (!creds) {
     return NextResponse.json(
-      { error: "WordPress not configured. Go to Settings to connect." },
+      { error: "WordPress not configured. Link a connection on this project or set up the legacy Settings." },
       { status: 400 },
     );
   }
@@ -61,12 +87,8 @@ export async function POST(
     );
   }
 
-  // Construct the WP client.
-  const client = new WpClient({
-    apiUrl: wpSettings.api_url,
-    username: wpSettings.username,
-    appPassword: wpSettings.app_password,
-  });
+  // Construct the WP client from the resolved credentials (AC-5 issue #44).
+  const client = new WpClient(creds);
 
   // Check if this project was already pushed (has stored WP page IDs).
   let wpPageIds: Record<string, number> = {};
