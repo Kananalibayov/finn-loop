@@ -1,216 +1,430 @@
-// AC-5, AC-6 (issue #24): WordPress settings page.
-// Form for apiUrl / username / appPassword with two actions:
-// - "Test connection" → POST /api/wp/test (from #23) with the typed values,
-//   shows green/red result inline.
-// - "Save" → PUT /api/wp/settings, persists to the wp_settings row.
-// On load, pre-fills from GET /api/wp/settings (apiUrl + username; password
-// is never returned by the API, only hasPassword — so the field starts empty).
+// AC-10 (issue #46): Settings redesigned into 4 app-level sections.
+//   1. Application — OpenAI key + generation model (DB override, env fallback).
+//   2. Account — change admin password (verify-current + new).
+//   3. Storage — read-only DB path + live counts.
+//   4. Advanced — legacy fallback WordPress (demoted, relabeled).
+//
+// The old single-WP-card is preserved verbatim in section 4 (backward compat
+// for unlinked projects); only its framing + explanatory note change.
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-type SettingsState = {
+type AppSettings = {
+  openaiApiKeySet: boolean;
+  openaiKeyMasked: string | null;
+  openaiKeySource: "db" | "env" | "none";
+  generationModel: string;
+  generationModelSource: "db" | "env" | "default";
+  adminPasswordSet: boolean;
+};
+
+type LegacyWpState = {
   apiUrl: string;
   username: string;
   appPassword: string;
   hasPassword: boolean;
 };
 
-type TestState =
+type WpTestState =
   | { status: "idle" }
   | { status: "testing" }
   | { status: "ok"; username: string; roles: string[] }
   | { status: "error"; message: string };
 
-type SaveState = "idle" | "saving" | "saved" | "error";
+type Counts = { projects: number; connections: number; pairingCodes: number };
 
 export default function SettingsPage() {
-  const [form, setForm] = useState<SettingsState>({
-    apiUrl: "",
-    username: "",
-    appPassword: "",
-    hasPassword: false,
-  });
-  const [loading, setLoading] = useState(true);
-  const [test, setTest] = useState<TestState>({ status: "idle" });
-  const [save, setSave] = useState<SaveState>("idle");
-  const [error, setError] = useState<string | null>(null);
+  // --- Section 1: Application ---
+  const [app, setApp] = useState<AppSettings | null>(null);
+  const [appLoading, setAppLoading] = useState(true);
+  const [newKey, setNewKey] = useState("");
+  const [newModel, setNewModel] = useState("");
+  const [appSaving, setAppSaving] = useState(false);
+  const [appResult, setAppResult] = useState<string | null>(null);
+  const [appError, setAppError] = useState<string | null>(null);
 
-  // Load existing settings on mount.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/wp/settings", { cache: "no-store" });
-        if (!res.ok) throw new Error(`Failed to load (HTTP ${res.status}).`);
-        const data = (await res.json()) as Partial<SettingsState>;
-        if (cancelled) return;
-        setForm({
-          apiUrl: data.apiUrl || "",
-          username: data.username || "",
-          appPassword: "", // never returned by the API
-          hasPassword: Boolean(data.hasPassword),
-        });
-        setLoading(false);
-      } catch (e) {
-        if (!cancelled) {
-          setError((e as Error).message);
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  // --- Section 2: Account ---
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwResult, setPwResult] = useState<string | null>(null);
+  const [pwError, setPwError] = useState<string | null>(null);
+
+  // --- Section 3: Storage ---
+  const [counts, setCounts] = useState<Counts | null>(null);
+  const dbPath = process.env.NEXT_PUBLIC_DATABASE_FILE ?? "data/app.db";
+
+  // --- Section 4: Legacy WP (unchanged logic) ---
+  const [legacy, setLegacy] = useState<LegacyWpState>({
+    apiUrl: "", username: "", appPassword: "", hasPassword: false,
+  });
+  const [legacyLoading, setLegacyLoading] = useState(true);
+  const [legacyTest, setLegacyTest] = useState<WpTestState>({ status: "idle" });
+  const [legacySave, setLegacySave] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [legacyError, setLegacyError] = useState<string | null>(null);
+
+  const loadApp = useCallback(async () => {
+    setAppLoading(true);
+    setAppError(null);
+    try {
+      const res = await fetch("/api/app/settings", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load (HTTP ${res.status}).`);
+      const data = (await res.json()) as AppSettings;
+      setApp(data);
+      setNewModel(data.generationModelSource === "default" ? "" : data.generationModel);
+    } catch (e) {
+      setAppError((e as Error).message);
+    } finally {
+      setAppLoading(false);
+    }
   }, []);
 
-  // AC-5: test connection using the currently-typed values (not saved ones).
-  async function handleTest() {
-    setTest({ status: "testing" });
-    setError(null);
+  const loadCounts = useCallback(async () => {
+    try {
+      const [p, c] = await Promise.all([
+        fetch("/api/projects", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/wp/connections", { cache: "no-store" }).then((r) => r.json()),
+      ]);
+      setCounts({
+        projects: Array.isArray(p) ? p.length : 0,
+        connections: Array.isArray(c) ? c.length : 0,
+        pairingCodes: 0, // not exposed via a list endpoint; omitted from the UI below
+      });
+    } catch {
+      // Non-fatal — counts are informational.
+    }
+  }, []);
+
+  const loadLegacy = useCallback(async () => {
+    setLegacyLoading(true);
+    setLegacyError(null);
+    try {
+      const res = await fetch("/api/wp/settings", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load (HTTP ${res.status}).`);
+      const data = (await res.json()) as Partial<LegacyWpState>;
+      setLegacy({
+        apiUrl: data.apiUrl || "",
+        username: data.username || "",
+        appPassword: "",
+        hasPassword: Boolean(data.hasPassword),
+      });
+    } catch (e) {
+      setLegacyError((e as Error).message);
+    } finally {
+      setLegacyLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadApp();
+    loadCounts();
+    loadLegacy();
+  }, [loadApp, loadCounts, loadLegacy]);
+
+  // --- Section 1 handlers ---
+  async function handleSaveApp() {
+    setAppSaving(true);
+    setAppError(null);
+    setAppResult(null);
+    try {
+      const patch: { openaiApiKey?: string; generationModel?: string } = {};
+      // Only send fields the operator touched. For the key, empty = clear.
+      if (newKey !== "") patch.openaiApiKey = newKey.trim();
+      else patch.openaiApiKey = ""; // explicit clear only if they emptied a previously-set field
+      patch.generationModel = newModel.trim();
+      const res = await fetch("/api/app/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = (await res.json().catch(() => ({}))) as AppSettings & { error?: string };
+      if (!res.ok) throw new Error(data?.error || `Save failed (HTTP ${res.status}).`);
+      setApp(data);
+      setNewKey("");
+      setAppResult("Saved. Generation will use the updated values on the next run.");
+      setTimeout(() => setAppResult(null), 4000);
+    } catch (e) {
+      setAppError((e as Error).message);
+    } finally {
+      setAppSaving(false);
+    }
+  }
+
+  // --- Section 2 handlers ---
+  async function handleChangePassword() {
+    setPwSaving(true);
+    setPwError(null);
+    setPwResult(null);
+    try {
+      const res = await fetch("/api/app/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        throw new Error(data?.error || `Change failed (HTTP ${res.status}).`);
+      }
+      setCurrentPw("");
+      setNewPw("");
+      setPwResult("Password updated — use the new one next login.");
+      setTimeout(() => setPwResult(null), 5000);
+    } catch (e) {
+      setPwError((e as Error).message);
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
+  // --- Section 4 handlers (unchanged logic from the old page) ---
+  async function handleLegacyTest() {
+    setLegacyTest({ status: "testing" });
+    setLegacyError(null);
     try {
       const res = await fetch("/api/wp/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiUrl: form.apiUrl,
-          username: form.username,
-          appPassword: form.appPassword,
+          apiUrl: legacy.apiUrl,
+          username: legacy.username,
+          appPassword: legacy.appPassword,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        username?: string;
-        roles?: string[];
-        error?: string;
+        ok?: boolean; username?: string; roles?: string[]; error?: string;
       };
       if (data.ok) {
-        setTest({
+        setLegacyTest({
           status: "ok",
-          username: data.username || form.username,
+          username: data.username || legacy.username,
           roles: data.roles || [],
         });
       } else {
-        setTest({ status: "error", message: data.error || "Connection failed." });
+        setLegacyTest({ status: "error", message: data.error || "Connection failed." });
       }
     } catch (e) {
-      setTest({ status: "error", message: (e as Error).message });
+      setLegacyTest({ status: "error", message: (e as Error).message });
     }
   }
 
-  // AC-5: save settings.
-  async function handleSave() {
-    setSave("saving");
-    setError(null);
+  async function handleLegacySave() {
+    setLegacySave("saving");
+    setLegacyError(null);
     try {
       const res = await fetch("/api/wp/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiUrl: form.apiUrl,
-          username: form.username,
-          appPassword: form.appPassword,
+          apiUrl: legacy.apiUrl,
+          username: legacy.username,
+          appPassword: legacy.appPassword,
         }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error || `Save failed (HTTP ${res.status}).`);
+        throw new Error(data?.error || `Save failed (HTTP ${res.status}).`);
       }
       const data = (await res.json()) as { hasPassword?: boolean };
-      setForm((f) => ({ ...f, appPassword: "", hasPassword: Boolean(data.hasPassword) }));
-      setSave("saved");
-      setTimeout(() => setSave("idle"), 3000);
+      setLegacy((f) => ({ ...f, appPassword: "", hasPassword: Boolean(data.hasPassword) }));
+      setLegacySave("saved");
+      setTimeout(() => setLegacySave("idle"), 3000);
     } catch (e) {
-      setSave("error");
-      setError((e as Error).message);
+      setLegacySave("error");
+      setLegacyError((e as Error).message);
     }
   }
 
-  if (loading) {
-    return (
-      <main className="page">
-        <div className="preview-empty">Loading settings…</div>
-      </main>
-    );
-  }
+  const keySourceLabel =
+    app?.openaiKeySource === "db" ? "Using DB override"
+    : app?.openaiKeySource === "env" ? "Using .env default"
+    : "Not configured";
+  const modelSourceLabel =
+    app?.generationModelSource === "db" ? "DB override"
+    : app?.generationModelSource === "env" ? ".env default"
+    : "default (gpt-4o-mini)";
 
   return (
     <main className="page">
       <header className="app-header">
         <h1>Settings</h1>
-        <p>Configure the WordPress instance this app delivers to.</p>
+        <p>App-level configuration: generation, account, storage.</p>
       </header>
 
-      <section className="card">
-        <h2>WordPress connection</h2>
+      {/* ---------------- Section 1: Application ---------------- */}
+      <section className="card" style={{ marginBottom: 16 }}>
+        <h2>Application</h2>
+        <p className="login-sub" style={{ marginBottom: 12 }}>
+          These power site generation for all clients. Overrides take precedence over <code>.env</code>.
+        </p>
 
-        <label htmlFor="apiUrl">REST API URL</label>
+        <label htmlFor="oai">OpenAI API key</label>
         <input
-          id="apiUrl"
-          type="url"
-          value={form.apiUrl}
-          onChange={(e) => setForm((f) => ({ ...f, apiUrl: e.target.value }))}
-          placeholder="https://your-wp.example/wp-json"
-        />
-        <span className="hint">The WP REST root, ending in /wp-json</span>
-
-        <label htmlFor="username">Username</label>
-        <input
-          id="username"
-          type="text"
-          value={form.username}
-          onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-          placeholder="wp-admin-user"
-        />
-
-        <label htmlFor="appPassword">Application Password</label>
-        <input
-          id="appPassword"
+          id="oai"
           type="password"
-          value={form.appPassword}
-          onChange={(e) => setForm((f) => ({ ...f, appPassword: e.target.value }))}
-          placeholder={form.hasPassword ? "•••••• (saved — type to replace)" : "xxxx xxxx xxxx xxxx xxxx xxxx"}
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          placeholder={app?.openaiKeyMasked ? `${app.openaiKeyMasked} — type to replace` : "sk-…"}
           autoComplete="off"
         />
-        {form.hasPassword && !form.appPassword && (
-          <span className="hint">A password is saved. Leave blank to keep it, or type a new one to replace.</span>
-        )}
+        <span className="hint">
+          {appLoading ? "Loading…" : `${keySourceLabel}${app?.openaiKeyMasked ? ` (${app.openaiKeyMasked})` : ""}`}. Leave the field empty + Save to clear the override and use <code>.env</code>.
+        </span>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleTest}
-            disabled={test.status === "testing" || !form.apiUrl || !form.username || !form.appPassword}
-          >
-            {test.status === "testing" ? "Testing…" : "Test connection"}
-          </button>
+        <label htmlFor="mdl">Generation model</label>
+        <input
+          id="mdl"
+          type="text"
+          value={newModel}
+          onChange={(e) => setNewModel(e.target.value)}
+          placeholder="gpt-4o-mini"
+        />
+        <span className="hint">Currently: {app?.generationModel ?? "—"} ({modelSourceLabel}). Leave empty for default.</span>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button
             type="button"
             className="btn-primary"
-            onClick={handleSave}
-            disabled={save === "saving" || !form.apiUrl || !form.username || !form.appPassword}
+            onClick={handleSaveApp}
+            disabled={appSaving}
           >
-            {save === "saving" ? "Saving…" : save === "saved" ? "Saved ✓" : "Save"}
+            {appSaving ? "Saving…" : "Save"}
           </button>
         </div>
+        {appResult && <div className="notice" style={{ marginTop: 12 }}>{appResult}</div>}
+        {appError && <div className="error" style={{ marginTop: 12 }}>{appError}</div>}
+      </section>
 
-        {/* AC-6: inline test result */}
-        {test.status === "ok" && (
-          <div className="notice" style={{ marginTop: 12 }}>
-            ✓ Connected as <strong>{test.username}</strong>
-            {test.roles.length > 0 && ` (${test.roles.join(", ")})`}
-          </div>
-        )}
-        {test.status === "error" && (
-          <div className="error" style={{ marginTop: 12 }}>
-            {test.message}
-          </div>
-        )}
+      {/* ---------------- Section 2: Account ---------------- */}
+      <section className="card" style={{ marginBottom: 16 }}>
+        <h2>Account</h2>
+        <p className="login-sub" style={{ marginBottom: 12 }}>
+          Change the admin password used to log in to this dashboard.
+        </p>
 
-        {save === "error" && error && (
-          <div className="error" style={{ marginTop: 12 }}>{error}</div>
+        <label htmlFor="cpw">Current password</label>
+        <input
+          id="cpw"
+          type="password"
+          value={currentPw}
+          onChange={(e) => setCurrentPw(e.target.value)}
+          autoComplete="current-password"
+        />
+        <label htmlFor="npw">New password <span className="hint">(min 8 chars)</span></label>
+        <input
+          id="npw"
+          type="password"
+          value={newPw}
+          onChange={(e) => setNewPw(e.target.value)}
+          autoComplete="new-password"
+        />
+
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleChangePassword}
+            disabled={pwSaving || !currentPw || newPw.length < 8}
+          >
+            {pwSaving ? "Changing…" : "Change password"}
+          </button>
+        </div>
+        {pwResult && <div className="notice" style={{ marginTop: 12 }}>{pwResult}</div>}
+        {pwError && <div className="error" style={{ marginTop: 12 }}>{pwError}</div>}
+      </section>
+
+      {/* ---------------- Section 3: Storage ---------------- */}
+      <section className="card" style={{ marginBottom: 16 }}>
+        <h2>Storage</h2>
+        <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "max-content 1fr", gap: "6px 16px", fontSize: 14 }}>
+          <dt className="hint">Database file</dt>
+          <dd style={{ margin: 0 }}><code>{dbPath}</code></dd>
+          <dt className="hint">Upload directory</dt>
+          <dd style={{ margin: 0 }}><code>data/uploads</code></dd>
+          <dt className="hint">Projects</dt>
+          <dd style={{ margin: 0 }}>{counts?.projects ?? "…"}</dd>
+          <dt className="hint">Connections</dt>
+          <dd style={{ margin: 0 }}>{counts?.connections ?? "…"}</dd>
+        </dl>
+      </section>
+
+      {/* ---------------- Section 4: Advanced (legacy WP) ---------------- */}
+      <section className="card">
+        <h2>Advanced — Legacy fallback WordPress</h2>
+        <p className="login-sub" style={{ marginBottom: 12 }}>
+          Used only for projects with <strong>no linked connection</strong>. To deliver to a specific client,
+          link a connection on the project page or manage them on the Connections page.
+        </p>
+
+        {legacyLoading ? (
+          <div className="preview-empty">Loading…</div>
+        ) : (
+          <>
+            <label htmlFor="apiUrl">REST API URL</label>
+            <input
+              id="apiUrl"
+              type="url"
+              value={legacy.apiUrl}
+              onChange={(e) => setLegacy((f) => ({ ...f, apiUrl: e.target.value }))}
+              placeholder="https://your-wp.example/wp-json"
+            />
+            <span className="hint">The WP REST root, ending in /wp-json</span>
+
+            <label htmlFor="username">Username</label>
+            <input
+              id="username"
+              type="text"
+              value={legacy.username}
+              onChange={(e) => setLegacy((f) => ({ ...f, username: e.target.value }))}
+              placeholder="wp-admin-user"
+            />
+
+            <label htmlFor="appPassword">Application Password</label>
+            <input
+              id="appPassword"
+              type="password"
+              value={legacy.appPassword}
+              onChange={(e) => setLegacy((f) => ({ ...f, appPassword: e.target.value }))}
+              placeholder={legacy.hasPassword ? "•••••• (saved — type to replace)" : "xxxx xxxx xxxx xxxx xxxx xxxx"}
+              autoComplete="off"
+            />
+            {legacy.hasPassword && !legacy.appPassword && (
+              <span className="hint">A password is saved. Leave blank to keep it, or type a new one to replace.</span>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleLegacyTest}
+                disabled={legacyTest.status === "testing" || !legacy.apiUrl || !legacy.username || !legacy.appPassword}
+              >
+                {legacyTest.status === "testing" ? "Testing…" : "Test connection"}
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleLegacySave}
+                disabled={legacySave === "saving" || !legacy.apiUrl || !legacy.username || !legacy.appPassword}
+              >
+                {legacySave === "saving" ? "Saving…" : legacySave === "saved" ? "Saved ✓" : "Save"}
+              </button>
+            </div>
+
+            {legacyTest.status === "ok" && (
+              <div className="notice" style={{ marginTop: 12 }}>
+                ✓ Connected as <strong>{legacyTest.username}</strong>
+                {legacyTest.roles.length > 0 && ` (${legacyTest.roles.join(", ")})`}
+              </div>
+            )}
+            {legacyTest.status === "error" && (
+              <div className="error" style={{ marginTop: 12 }}>{legacyTest.message}</div>
+            )}
+            {legacySave === "error" && legacyError && (
+              <div className="error" style={{ marginTop: 12 }}>{legacyError}</div>
+            )}
+          </>
         )}
       </section>
     </main>

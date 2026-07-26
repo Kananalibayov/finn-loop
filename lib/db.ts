@@ -111,6 +111,19 @@ function db(): Database.Database {
       expires_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #46): app_settings — single-row table (id always 1) holding
+  // app-level overrides for the OpenAI key, generation model, and admin
+  // password hash. Empty string = "no override, fall back to env". This is
+  // the same single-row idempotent pattern as wp_settings.
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      openai_api_key TEXT NOT NULL DEFAULT '',
+      generation_model TEXT NOT NULL DEFAULT '',
+      admin_password_hash TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+  `);
   dbInstance = conn;
   return conn;
 }
@@ -447,5 +460,77 @@ export function addWpConnection(input: {
 export function deleteWpConnection(id: number): boolean {
   const info = db().prepare(`DELETE FROM wp_connections WHERE id = ?`).run(id);
   return info.changes > 0;
+}
+
+// --- App-level settings (issue #46: OpenAI key, model, admin password) ---
+
+/** AC-1 (issue #46): row shape for app_settings (single row, id always 1). */
+export interface AppSettingsRow {
+  id: number;
+  openai_api_key: string;
+  generation_model: string;
+  admin_password_hash: string;
+  updated_at: string;
+}
+
+/** AC-2 (issue #46): return the single app_settings row, or null if absent.
+ *  Callers should treat null as "all defaults, use env". */
+export function getAppSettings(): AppSettingsRow | null {
+  const row = db().prepare(`SELECT * FROM app_settings WHERE id = 1`).get();
+  return (row as AppSettingsRow | undefined) ?? null;
+}
+
+/** AC-2 (issue #46): partial UPSERT of the app_settings row (id always 1).
+ *  Only the provided fields are updated; empty string means "clear override".
+ *  Returns the full row after save. */
+export function saveAppSettings(input: {
+  openaiApiKey?: string;
+  generationModel?: string;
+  adminPasswordHash?: string;
+}): AppSettingsRow {
+  const conn = db();
+  const now = new Date().toISOString();
+  // Coalesce to current-or-empty so omitted fields don't clobber existing values.
+  const current = getAppSettings() ?? {
+    openai_api_key: "",
+    generation_model: "",
+    admin_password_hash: "",
+  };
+  const openai_api_key = input.openaiApiKey ?? current.openai_api_key;
+  const generation_model = input.generationModel ?? current.generation_model;
+  const admin_password_hash = input.adminPasswordHash ?? current.admin_password_hash;
+  conn
+    .prepare(
+      `INSERT INTO app_settings (id, openai_api_key, generation_model, admin_password_hash, updated_at)
+       VALUES (1, @openai_api_key, @generation_model, @admin_password_hash, @updated_at)
+       ON CONFLICT(id) DO UPDATE SET
+         openai_api_key = excluded.openai_api_key,
+         generation_model = excluded.generation_model,
+         admin_password_hash = excluded.admin_password_hash,
+         updated_at = excluded.updated_at`,
+    )
+    .run({
+      openai_api_key,
+      generation_model,
+      admin_password_hash,
+      updated_at: now,
+    });
+  return getAppSettings()!;
+}
+
+/** AC-3 (issue #46): the effective OpenAI key — DB override if set, else env.
+ *  Returns empty string if neither is configured. */
+export function getEffectiveOpenAiKey(): string {
+  const dbKey = getAppSettings()?.openai_api_key ?? "";
+  if (dbKey) return dbKey;
+  return process.env.OPENAI_API_KEY ?? "";
+}
+
+/** AC-3 (issue #46): the effective generation model — DB override if set,
+ *  else the env value, else the hardcoded default gpt-4o-mini. */
+export function getEffectiveGenerationModel(): string {
+  const dbModel = getAppSettings()?.generation_model ?? "";
+  if (dbModel) return dbModel;
+  return process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 }
 

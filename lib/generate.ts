@@ -6,7 +6,8 @@
 // Sequential generation (not parallel) to keep token usage predictable; the
 // pages are small. Throws on any failure — callers wrap in try/catch.
 
-import { getOpenAI, GENERATION_MODEL } from "@/lib/openai";
+import { getOpenAI } from "@/lib/openai";
+import { getEffectiveGenerationModel } from "@/lib/db";
 import { buildPrompt, cleanHtml } from "@/lib/prompts";
 import { getTheme } from "@/lib/themes";
 import { ALL_PAGES, BusinessInput, GeneratedPage, Mode, PageKey } from "@/lib/types";
@@ -31,6 +32,7 @@ export async function generatePages(
 ): Promise<{ pages: GeneratedPage[]; themeId: import("@/lib/themes").ThemeId }> {
   const { input, mode, themeId } = opts;
   const client = getOpenAI(); // throws clearly if OPENAI_API_KEY is missing
+  const model = getEffectiveGenerationModel(); // AC-5 (issue #46): DB/env/default
   const theme = getTheme(themeId);
   const pages: PageKey[] = mode === "home" ? ["home"] : ALL_PAGES;
 
@@ -38,7 +40,7 @@ export async function generatePages(
   for (const page of pages) {
     const { system, user } = buildPrompt(page, input, theme);
     const res = await client.chat.completions.create({
-      model: GENERATION_MODEL,
+      model,
       temperature: 0.7,
       messages: [
         { role: "system", content: system },

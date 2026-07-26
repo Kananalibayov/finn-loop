@@ -3,8 +3,13 @@
 // Session is a signed JWT (jose HS256) stored in an http-only cookie, signed
 // with ADMIN_SESSION_SECRET. Both env vars are read server-side only.
 
-import { compareSync } from "bcryptjs";
+import { compareSync, hashSync } from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
+// NOTE (issue #46): lib/auth.ts must stay Edge-Runtime-safe because middleware
+// imports verifySession from here. Do NOT statically import lib/db (it pulls
+// in better-sqlite3, a native module the Edge Runtime can't load). The
+// DB-stored admin hash is read by the route handlers (login, password-change)
+// and passed in via verifyPasswordAgainstHash below.
 
 const SESSION_COOKIE = "admin_session";
 // 7 days — a long-lived operator session; localhost/single-user only (NG-1).
@@ -21,19 +26,30 @@ function sessionSecret(): Uint8Array {
   return new TextEncoder().encode(raw);
 }
 
-/** AC-2: verify a plaintext password against the configured bcrypt hash. */
-export function verifyPassword(password: string): boolean {
-  const hash = process.env.ADMIN_PASSWORD_HASH;
-  if (!hash) {
-    // No hash configured = nobody can log in. Fail closed.
-    return false;
+/** AC-2: verify a plaintext password against the configured bcrypt hash.
+ *  AC-6 (issue #46): the caller resolves the candidate hash(es) — DB override
+ *  first, then env fallback — and passes them in. This keeps lib/auth.ts free
+ *  of any lib/db import so it stays Edge-Runtime-safe (middleware imports
+ *  verifySession from here). Returns true if the password matches any hash. */
+export function verifyPasswordAgainstHash(
+  password: string,
+  candidateHashes: Array<string | null | undefined>,
+): boolean {
+  for (const hash of candidateHashes) {
+    if (!hash) continue;
+    try {
+      if (compareSync(password, hash)) return true;
+    } catch {
+      // Malformed hash — skip this source, try the next, never throw.
+    }
   }
-  try {
-    return compareSync(password, hash);
-  } catch {
-    // Malformed hash = treat as no-match, never throw.
-    return false;
-  }
+  return false;
+}
+
+/** AC-6 (issue #46): hash a plaintext password for storage. The caller writes
+ *  it to the DB (or env). Kept here so the bcrypt cost factor is centralized. */
+export function hashPassword(plaintext: string): string {
+  return hashSync(plaintext, 10);
 }
 
 /** AC-3: mint a signed JWT and return the Set-Cookie header value. */
