@@ -1,12 +1,31 @@
 // AC-4 (issue #32): WP connections list + create endpoints.
+// AC-2 (issue #40): safeConnection now also exposes pairedViaCode (derived
+// from the listWpConnections join). appPassword is still NEVER returned.
 import { NextRequest, NextResponse } from "next/server";
 import { listWpConnections, addWpConnection } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function safeConnection(c: { id: number; label: string; api_url: string; username: string; app_password: string; created_at: string }) {
-  return { id: c.id, label: c.label, apiUrl: c.api_url, username: c.username, hasPassword: Boolean(c.app_password), createdAt: c.created_at };
+function safeConnection(c: {
+  id: number;
+  label: string;
+  api_url: string;
+  username: string;
+  app_password: string;
+  created_at: string;
+  /** Absent for freshly-inserted rows (addWpConnection return); defaults to 0. */
+  paired_via_code?: number;
+}) {
+  return {
+    id: c.id,
+    label: c.label,
+    apiUrl: c.api_url,
+    username: c.username,
+    hasPassword: Boolean(c.app_password),
+    createdAt: c.created_at,
+    pairedViaCode: (c.paired_via_code ?? 0) > 0,
+  };
 }
 
 export async function GET() {

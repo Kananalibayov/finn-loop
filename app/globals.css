@@ -24,6 +24,9 @@
   /* AC-7 (issue #38): success palette for the "Pushed to WP" badge. */
   --app-success: #16a34a;
   --app-success-bg: #dcfce7;
+  /* AC-7 (issue #40): warning palette for the "No password" badge. */
+  --app-warning: #d97706;
+  --app-warning-bg: #fef3c7;
 }
 
 * {
@@ -883,4 +886,87 @@ textarea:focus {
 /* AC-6: full-width empty-state card spanning the grid. */
 .dashboard-empty {
   grid-column: 1 / -1;
+}
+
+/* ---- Connections dashboard — rich connector cards (issue #40) ---- */
+/* Mirrors .project-card so the two dashboards read consistently. */
+
+.connection-card {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  padding: 16px;
+  box-shadow: var(--app-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.connection-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--app-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-card-subtitle {
+  margin: -6px 0 0;
+  font-size: 13px;
+  color: var(--app-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.connection-card-date {
+  font-size: 12px;
+  color: var(--app-muted);
+  margin-left: auto;
+}
+
+.connection-card-test-result {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.connection-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--app-border);
+}
+
+.connection-card-actions .btn-primary,
+.connection-card-actions .btn-secondary {
+  width: auto;
+  margin-top: 0;
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+/* AC-7: new badge variants. */
+.badge--info {
+  background: #eff6ff;
+  color: var(--app-primary);
+  border-color: #bfdbfe;
+}
+
+.badge--warning {
+  background: var(--app-warning-bg);
+  color: var(--app-warning);
+  border-color: var(--app-warning);
 }

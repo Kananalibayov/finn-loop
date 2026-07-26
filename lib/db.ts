@@ -374,11 +374,22 @@ export interface WpConnectionRow {
   created_at: string;
 }
 
-/** AC-2 (#32): list all WP connections, newest-first. */
-export function listWpConnections(): WpConnectionRow[] {
+/** AC-2 (#32): list all WP connections, newest-first.
+ *  AC-1 (#40): extended to surface each connection's origin — whether it was
+ *  auto-created by the plugin consuming a pairing code (recoverable via the
+ *  wp_pairing_codes join on connection_id). No new columns; purely a richer
+ *  SELECT + return type. */
+export function listWpConnections(): Array<WpConnectionRow & { paired_via_code: number }> {
   return db()
-    .prepare(`SELECT * FROM wp_connections ORDER BY id DESC`)
-    .all() as WpConnectionRow[];
+    .prepare(
+      `SELECT
+         c.*,
+         (SELECT COUNT(*) FROM wp_pairing_codes p
+          WHERE p.connection_id = c.id AND p.used = 1) AS paired_via_code
+       FROM wp_connections c
+       ORDER BY c.id DESC`,
+    )
+    .all() as Array<WpConnectionRow & { paired_via_code: number }>;
 }
 
 /** AC-2 (#32): get one WP connection by ID, or null. */
