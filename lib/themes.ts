@@ -2,7 +2,7 @@
 // Each theme is a set of CSS variables the LLM-generated pages reference,
 // plus a short descriptor passed to the prompt so the model can match tone.
 
-export type ThemeId = "minimal" | "warm" | "bold";
+export type ThemeId = "minimal" | "warm" | "bold" | "template";
 
 export interface Theme {
   id: ThemeId;

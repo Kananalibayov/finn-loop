@@ -6,6 +6,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 type Template = {
@@ -158,10 +159,12 @@ export default function TemplatesPage() {
                     <span className="badge badge--warning">Spec only</span>
                   )}
                 </div>
-                {/* Delivery flow arrives in #54; for now, no per-card action
-                    besides delete (hidden on builtins). */}
-                {t.source !== "builtin" && (
-                  <div className="project-card-actions">
+                {/* AC-6 (#54): Deliver is the primary action on every card. */}
+                <div className="project-card-actions">
+                  <Link href={`/templates/${t.id}/deliver`} className="btn-primary">
+                    Deliver
+                  </Link>
+                  {t.source !== "builtin" && (
                     <button
                       type="button"
                       className="btn-secondary"
@@ -170,8 +173,8 @@ export default function TemplatesPage() {
                     >
                       {deletingId === t.id ? "Deleting…" : "Delete"}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </article>
             );
           })}
