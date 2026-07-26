@@ -335,15 +335,20 @@ export default function ConnectionsPage() {
                 {/* AC-4(e): actions. */}
                 <div className="connection-card-actions">
                   {conn.pairedViaCode && (
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={() => handleLogin(conn)}
-                      disabled={loginId === conn.id}
-                      title="Open this client's WP admin in a new tab (single-use token, expires in 5 min)"
-                    >
-                      {loginId === conn.id ? "Opening…" : "Log into WP"}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() => handleLogin(conn)}
+                        disabled={loginId === conn.id}
+                        title="Open this client's WP admin in a new tab (single-use token, expires in 5 min)"
+                      >
+                        {loginId === conn.id ? "Opening…" : "Log into WP"}
+                      </button>
+                      <Link href={`/connections/${conn.id}/manage`} className="btn-secondary">
+                        Manage
+                      </Link>
+                    </>
                   )}
                   <button
                     type="button"

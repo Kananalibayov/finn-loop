@@ -30,10 +30,15 @@ const USER_AGENT = "ai-website-generator/0.1";
  * Shared internal request helper — builds the auth header, sets UA + timeout,
  * and returns the Response. Throws on network errors (callers wrap in try/catch).
  */
-async function wpFetch(
+export async function wpFetch(
   creds: WpCreds,
   path: string,
-  options: { method: string; body?: Record<string, unknown>; timeoutMs: number },
+  options: {
+    method: string;
+    body?: Record<string, unknown> | string;
+    headers?: Record<string, string>;
+    timeoutMs?: number;
+  },
 ): Promise<Response> {
   const base = creds.apiUrl.replace(/\/+$/, "");
   const url = `${base}${path}`;
@@ -42,7 +47,7 @@ async function wpFetch(
   ).toString("base64");
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs);
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 10000);
   try {
     const res = await fetch(url, {
       method: options.method,
@@ -51,8 +56,14 @@ async function wpFetch(
         "User-Agent": USER_AGENT,
         Accept: "application/json",
         ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.headers ?? {}),
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
       },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: options.body
+        ? typeof options.body === "string"
+          ? options.body
+          : JSON.stringify(options.body)
+        : undefined,
       signal: controller.signal,
     });
     return res;
