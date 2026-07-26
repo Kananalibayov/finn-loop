@@ -21,6 +21,9 @@ export interface ProjectRow {
   site_group_id: string;
   /** AC-4 (issue #30): JSON map of page keys → WP page IDs (null if not pushed). */
   wp_page_ids: string | null;
+  /** AC-1 (issue #44): linked wp_connections row id (null = unlinked, falls
+   *  back to legacy wp_settings on push). */
+  wp_connection_id: number | null;
 }
 
 /** AC-7: configurable via DATABASE_FILE env, default data/app.db. */
@@ -65,6 +68,12 @@ function db(): Database.Database {
   // AC-4 (issue #30): guarded ALTER for wp_page_ids (WP page IDs after push).
   if (!cols.some((c) => c.name === "wp_page_ids")) {
     conn.exec(`ALTER TABLE sites ADD COLUMN wp_page_ids TEXT;`);
+  }
+  // AC-1 (issue #44): guarded ALTER for wp_connection_id (links a project to a
+  // specific wp_connections row; null = unlinked, push falls back to legacy
+  // wp_settings). Idempotent — re-runs are no-ops; existing rows stay null.
+  if (!cols.some((c) => c.name === "wp_connection_id")) {
+    conn.exec(`ALTER TABLE sites ADD COLUMN wp_connection_id INTEGER;`);
   }
   // AC-1 (issue #24): wp_settings — single-row table for WP connection creds.
   // id is always 1 (enforced by the helpers). Password stored as plaintext
@@ -273,6 +282,17 @@ export function updateProjectWpPageIds(
   db()
     .prepare(`UPDATE sites SET wp_page_ids = ? WHERE id = ?`)
     .run(JSON.stringify(wpPageIds), projectId);
+}
+
+/** AC-2 (issue #44): link/unlink a project to a wp_connections row.
+ *  Pass null to unlink (push falls back to legacy wp_settings). */
+export function updateProjectConnectionId(
+  projectId: number,
+  connectionId: number | null,
+): void {
+  db()
+    .prepare(`UPDATE sites SET wp_connection_id = ? WHERE id = ?`)
+    .run(connectionId, projectId);
 }
 
 // --- WP pairing codes (issue #34: plugin auto-connect) ---
