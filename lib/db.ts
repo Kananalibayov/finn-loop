@@ -140,6 +140,20 @@ function db(): Database.Database {
       created_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #61): wp_login_tokens — single-use, short-lived tokens for the
+  // SSO auto-login handshake. Each token is connection-scoped + consumed on
+  // first validation. The plugin validates a token by calling the platform
+  // back; the platform marks it used here (atomic conditional UPDATE).
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS wp_login_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      connection_id INTEGER NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+  `);
   // AC-2 (issue #51): seed built-in starter templates (idempotent — only
   // inserts builtins whose name isn't already present).
   seedBuiltinTemplates(conn);
@@ -637,5 +651,70 @@ export function insertTemplate(input: {
 export function deleteTemplate(id: number): boolean {
   const info = db().prepare(`DELETE FROM templates WHERE id = ?`).run(id);
   return info.changes > 0;
+}
+
+// --- WP SSO login tokens (issue #61: auto-login from dashboard) ---
+
+/** AC-1 (issue #61): row shape for wp_login_tokens. */
+export interface WpLoginTokenRow {
+  id: number;
+  connection_id: number;
+  token: string;
+  used: number;
+  created_at: string;
+  expires_at: string;
+}
+
+const LOGIN_TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/** AC-1: generate a single-use login token for a connection. Returns the token
+ *  + its expiry. The token is a 32-byte random hex string. */
+export function createLoginToken(connectionId: number): { token: string; expiresAt: string } {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + LOGIN_TOKEN_TTL_MS);
+  const token = randomHexToken();
+  db()
+    .prepare(
+      `INSERT INTO wp_login_tokens (connection_id, token, used, created_at, expires_at)
+       VALUES (@connection_id, @token, 0, @created_at, @expires_at)`,
+    )
+    .run({
+      connection_id: connectionId,
+      token,
+      created_at: now.toISOString(),
+      expires_at: expiresAt.toISOString(),
+    });
+  return { token, expiresAt: expiresAt.toISOString() };
+}
+
+/** AC-1: consume a login token — atomic single-use validation. Returns the
+ *  connection's username on success (so the plugin can log that user in), or
+ *  null if the token is wrong / already used / expired / connection-mismatched.
+ *  Race-free via a conditional UPDATE + changes-check (same pattern as #34's
+ *  consumePairingCode). */
+export function consumeLoginToken(
+  connectionId: number,
+  token: string,
+): { username: string } | null {
+  const conn = db();
+  const info = conn
+    .prepare(
+      `UPDATE wp_login_tokens
+       SET used = 1
+       WHERE token = ? AND connection_id = ? AND used = 0 AND expires_at > ?`,
+    )
+    .run(token, connectionId, new Date().toISOString());
+  if (info.changes === 0) return null;
+  const c = conn.prepare(`SELECT username FROM wp_connections WHERE id = ?`).get(connectionId) as
+    | { username: string }
+    | undefined;
+  return c ?? null;
+}
+
+/** 32-byte random hex token (64 chars). Uses Web Crypto (global in Node 18+). */
+function randomHexToken(): string {
+  const arr = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(arr);
+  return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
