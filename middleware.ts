@@ -13,8 +13,9 @@ const PUBLIC_PATHS = new Set(["/login", "/logout", "/api/login", "/api/wp/pairin
  *  segment, so it can't go in PUBLIC_PATHS (exact-match). Match by prefix. */
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
-  // /api/wp/connections/<id>/validate-login-token — plugin calls this server-side.
+  // Dynamic public endpoints (plugin calls these server-to-server):
   if (/^\/api\/wp\/connections\/\d+\/validate-login-token$/.test(pathname)) return true;
+  if (/^\/api\/wp\/connections\/\d+\/health-report$/.test(pathname)) return true;
   return false;
 }
 

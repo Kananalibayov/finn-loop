@@ -48,19 +48,29 @@ export async function POST(req: NextRequest) {
   }
 
   // AC-4 step 2-3: create the connection.
+  // AC-2 (issue #62): generate a health_secret for plugin→platform reporting.
   const apiUrl = deriveApiUrl(siteUrl.trim());
+  const healthSecret = randomHex32();
   const conn = addWpConnection({
     label: pairingRow.label,
     apiUrl,
     username: username.trim(),
     appPassword: appPassword.trim(),
+    healthSecret,
   });
 
   // AC-4 step 4: link the pairing code to the connection.
   linkPairingCode(code.trim(), conn.id);
 
   return NextResponse.json(
-    { ok: true, connectionId: conn.id, label: pairingRow.label },
+    { ok: true, connectionId: conn.id, label: pairingRow.label, healthSecret },
     { status: 200 },
   );
+}
+
+/** 32-byte hex string for the health secret. */
+function randomHex32(): string {
+  const arr = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(arr);
+  return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
 }

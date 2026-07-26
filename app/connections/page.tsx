@@ -17,6 +17,12 @@ type Connection = {
   /** AC-2 (#40): true when this connection was auto-created by the plugin
    *  consuming a pairing code (vs added manually by the operator). */
   pairedViaCode?: boolean;
+  /** AC-5 (#62): health reporting fields — null until first report. */
+  wpVersion?: string | null;
+  themeName?: string | null;
+  pluginCount?: number | null;
+  healthScore?: number | null;
+  healthReportedAt?: string | null;
 };
 
 type PairingCode = {
@@ -306,6 +312,16 @@ export default function ConnectionsPage() {
                   <span className="badge badge--theme">{conn.username}</span>
                 </div>
 
+                {/* AC-5 (issue #62): health summary line. */}
+                {conn.healthReportedAt ? (
+                  <div className="hint" style={{ fontSize: 12, lineHeight: 1.6 }}>
+                    WP {conn.wpVersion ?? "?"} · {conn.themeName ?? "—"} · {conn.pluginCount ?? 0} plugins ·
+                    Health: {conn.healthScore ?? "-"}/10 · {formatRelative(conn.healthReportedAt)}
+                  </div>
+                ) : (
+                  <div className="hint" style={{ fontSize: 12 }}>No health data yet</div>
+                )}
+
                 {/* AC-5: inline test result. */}
                 {ts.status === "ok" && (
                   <div className="connection-card-test-result notice">
@@ -401,4 +417,18 @@ function formatDate(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** AC-5 (issue #62): relative time for health-reported-at ("2h ago", "just now"). */
+function formatRelative(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }

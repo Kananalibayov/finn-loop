@@ -76,6 +76,27 @@ function db(): Database.Database {
   if (!cols.some((c) => c.name === "wp_connection_id")) {
     conn.exec(`ALTER TABLE sites ADD COLUMN wp_connection_id INTEGER;`);
   }
+  // AC-1 (issue #62): guarded ALTERs for health-reporting columns on
+  // wp_connections. Idempotent — checks PRAGMA table_info each time.
+  const connCols = conn.prepare(`PRAGMA table_info(wp_connections)`).all() as Array<{ name: string }>;
+  if (!connCols.some((c) => c.name === "wp_version")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN wp_version TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "theme_name")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN theme_name TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "plugin_count")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN plugin_count INTEGER;`);
+  }
+  if (!connCols.some((c) => c.name === "health_score")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_score INTEGER;`);
+  }
+  if (!connCols.some((c) => c.name === "health_reported_at")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_reported_at TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "health_secret")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_secret TEXT;`);
+  }
   // AC-1 (issue #24): wp_settings — single-row table for WP connection creds.
   // id is always 1 (enforced by the helpers). Password stored as plaintext
   // (NG-1: single-operator tool on a Docker volume; encryption deferred).
@@ -463,6 +484,13 @@ export interface WpConnectionRow {
   app_password: string;
   pairing_code: string | null;
   created_at: string;
+  /** AC-1 (issue #62): health-reporting fields (null until first report). */
+  wp_version: string | null;
+  theme_name: string | null;
+  plugin_count: number | null;
+  health_score: number | null;
+  health_reported_at: string | null;
+  health_secret: string | null;
 }
 
 /** AC-2 (#32): list all WP connections, newest-first.
@@ -497,12 +525,14 @@ export function addWpConnection(input: {
   apiUrl: string;
   username: string;
   appPassword: string;
+  /** AC-2 (issue #62): optional health secret for plugin-paired connections. */
+  healthSecret?: string;
 }): WpConnectionRow {
   const now = new Date().toISOString();
   const info = db()
     .prepare(
-      `INSERT INTO wp_connections (label, api_url, username, app_password, created_at)
-       VALUES (@label, @apiUrl, @username, @appPassword, @createdAt)`,
+      `INSERT INTO wp_connections (label, api_url, username, app_password, created_at, health_secret)
+       VALUES (@label, @apiUrl, @username, @appPassword, @createdAt, @healthSecret)`,
     )
     .run({
       label: input.label,
@@ -510,6 +540,7 @@ export function addWpConnection(input: {
       username: input.username,
       appPassword: input.appPassword,
       createdAt: now,
+      healthSecret: input.healthSecret ?? null,
     });
   return getWpConnection(Number(info.lastInsertRowid))!;
 }
@@ -716,5 +747,52 @@ function randomHexToken(): string {
   const arr = new Uint8Array(32);
   globalThis.crypto.getRandomValues(arr);
   return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// --- WP health reporting (issue #62: health/info from plugin) ---
+
+/** AC-1 (issue #62): save a health report for a connection. Called by the
+ *  public health-report endpoint after validating the health_secret. */
+export function saveWpConnectionHealth(
+  connectionId: number,
+  data: {
+    wpVersion: string;
+    themeName: string;
+    pluginCount: number;
+    healthScore: number;
+  },
+): void {
+  db()
+    .prepare(
+      `UPDATE wp_connections
+       SET wp_version = @wpVersion,
+           theme_name = @themeName,
+           plugin_count = @pluginCount,
+           health_score = @healthScore,
+           health_reported_at = @reportedAt
+       WHERE id = @id`,
+    )
+    .run({
+      id: connectionId,
+      wpVersion: data.wpVersion,
+      themeName: data.themeName,
+      pluginCount: data.pluginCount,
+      healthScore: data.healthScore,
+      reportedAt: new Date().toISOString(),
+    });
+}
+
+/** AC-2 (issue #62): verify a connection's health_secret using a constant-time
+ *  comparison (prevents timing attacks). Returns true if the secret matches. */
+export function verifyHealthSecret(connectionId: number, secret: string): boolean {
+  const row = db()
+    .prepare(`SELECT health_secret FROM wp_connections WHERE id = ?`)
+    .get(connectionId) as { health_secret: string | null } | undefined;
+  if (!row || !row.health_secret) return false;
+  // Constant-time comparison.
+  const a = Buffer.from(secret);
+  const b = Buffer.from(row.health_secret);
+  if (a.length !== b.length) return false;
+  return a.equals(b); // Node Buffer.equals is constant-time
 }
 
