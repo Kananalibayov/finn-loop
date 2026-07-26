@@ -6,7 +6,8 @@
 // reach this endpoint.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createSessionCookie, verifyPassword } from "@/lib/auth";
+import { createSessionCookie, verifyPasswordAgainstHash } from "@/lib/auth";
+import { getAppSettings } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,10 @@ export async function POST(req: NextRequest) {
   }
 
   const password = body?.password ?? "";
-  const ok = verifyPassword(password);
+  // AC-6 (issue #46): try DB override first, then env fallback.
+  const dbHash = getAppSettings()?.admin_password_hash ?? null;
+  const envHash = process.env.ADMIN_PASSWORD_HASH ?? null;
+  const ok = verifyPasswordAgainstHash(password, [dbHash, envHash]);
   if (!ok) {
     // Generic error — never reveal whether the hash was missing vs. wrong pw.
     return NextResponse.json({ error: "Incorrect password." }, { status: 401 });
