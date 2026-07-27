@@ -872,6 +872,47 @@ export function assignProjectToClient(projectId: number, clientId: number | null
   db().prepare(`UPDATE sites SET client_id = ? WHERE id = ?`).run(clientId, projectId);
 }
 
+/** Returns projects assigned to a client, newest-first, with health from the
+ *  linked connection (LEFT JOIN on wp_connection_id). */
+export function listProjectsForClient(clientId: number): Array<{
+  id: number;
+  business_name: string;
+  theme_id: string;
+  created_at: string;
+  pages_json: string;
+  wp_connection_id: number | null;
+  wp_version: string | null;
+  wp_theme_name: string | null;
+  plugin_count: number | null;
+  health_score: number | null;
+  health_reported_at: string | null;
+}> {
+  return db()
+    .prepare(
+      `SELECT s.id, s.business_name, s.theme_id, s.created_at, s.pages_json,
+              s.wp_connection_id,
+              c.wp_version, c.theme_name AS wp_theme_name, c.plugin_count,
+              c.health_score, c.health_reported_at
+       FROM sites s
+       LEFT JOIN wp_connections c ON s.wp_connection_id = c.id
+       WHERE s.client_id = ?
+       ORDER BY s.id DESC`,
+    )
+    .all(clientId) as Array<{
+    id: number;
+    business_name: string;
+    theme_id: string;
+    created_at: string;
+    pages_json: string;
+    wp_connection_id: number | null;
+    wp_version: string | null;
+    wp_theme_name: string | null;
+    plugin_count: number | null;
+    health_score: number | null;
+    health_reported_at: string | null;
+  }>;
+}
+
 /** Safe projection — never returns password_hash. */
 function safeClient(c: ClientRow): Omit<ClientRow, "password_hash"> {
   return { id: c.id, name: c.name, email: c.email, created_at: c.created_at };
