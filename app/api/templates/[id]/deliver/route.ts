@@ -4,7 +4,7 @@
 // optionally links it to a connection, and returns the new project id.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getTemplate, insertProject, updateProjectConnectionId, getWpConnection } from "@/lib/db";
+import { getTemplate, insertProject, updateProjectConnectionId, getWpConnection, logActivity } from "@/lib/db";
 import { deliverFromTemplate, type DeliverMode } from "@/lib/template-deliver";
 import type { BusinessInput } from "@/lib/types";
 
@@ -109,6 +109,13 @@ export async function POST(
     updateProjectConnectionId(projectId, body.connectionId);
     linkedConnectionId = body.connectionId;
   }
+
+  logActivity({
+    eventType: "deliver_template",
+    description: `Delivered "${template.name}" to "${normalizedInput.businessName}" (${delivered.modeUsed})`,
+    projectId,
+    connectionId: linkedConnectionId ?? undefined,
+  });
 
   return NextResponse.json(
     { id: projectId, modeUsed: delivered.modeUsed, connectionId: linkedConnectionId },
