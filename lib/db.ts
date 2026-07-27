@@ -175,6 +175,21 @@ function db(): Database.Database {
       expires_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #68): clients — client accounts for the client portal.
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+  // AC-2 (issue #68): guarded ALTER — link sites to a client (nullable).
+  const sitesCols = conn.prepare(`PRAGMA table_info(sites)`).all() as Array<{ name: string }>;
+  if (!sitesCols.some((c) => c.name === "client_id")) {
+    conn.exec(`ALTER TABLE sites ADD COLUMN client_id INTEGER;`);
+  }
   // AC-2 (issue #51): seed built-in starter templates (idempotent — only
   // inserts builtins whose name isn't already present).
   seedBuiltinTemplates(conn);
@@ -794,5 +809,71 @@ export function verifyHealthSecret(connectionId: number, secret: string): boolea
   const b = Buffer.from(row.health_secret);
   if (a.length !== b.length) return false;
   return a.equals(b); // Node Buffer.equals is constant-time
+}
+
+// --- Clients (issue #68: client portal auth) ---
+
+export interface ClientRow {
+  id: number;
+  name: string;
+  email: string;
+  password_hash: string;
+  created_at: string;
+}
+
+export function createClient(input: {
+  name: string;
+  email: string;
+  passwordHash: string;
+}): ClientRow {
+  const now = new Date().toISOString();
+  const info = db()
+    .prepare(
+      `INSERT INTO clients (name, email, password_hash, created_at)
+       VALUES (@name, @email, @passwordHash, @createdAt)`,
+    )
+    .run({
+      name: input.name,
+      email: input.email.toLowerCase().trim(),
+      passwordHash: input.passwordHash,
+      createdAt: now,
+    });
+  return getClientById(Number(info.lastInsertRowid))!;
+}
+
+export function getClientByEmail(email: string): ClientRow | null {
+  const row = db()
+    .prepare(`SELECT * FROM clients WHERE email = ?`)
+    .get(email.toLowerCase().trim()) as ClientRow | undefined;
+  return row ?? null;
+}
+
+export function getClientById(id: number): ClientRow | null {
+  const row = db().prepare(`SELECT * FROM clients WHERE id = ?`).get(id) as ClientRow | undefined;
+  return row ?? null;
+}
+
+export function listClients(): Array<Omit<ClientRow, "password_hash">> {
+  const rows = db()
+    .prepare(`SELECT id, name, email, created_at FROM clients ORDER BY id DESC`)
+    .all() as Array<Omit<ClientRow, "password_hash">>;
+  return rows;
+}
+
+export function deleteClient(id: number): boolean {
+  // Unlink projects before deleting (don't delete the projects themselves).
+  db().prepare(`UPDATE sites SET client_id = NULL WHERE client_id = ?`).run(id);
+  const info = db().prepare(`DELETE FROM clients WHERE id = ?`).run(id);
+  return info.changes > 0;
+}
+
+/** AC-2: assign/unassign a project to a client. */
+export function assignProjectToClient(projectId: number, clientId: number | null): void {
+  db().prepare(`UPDATE sites SET client_id = ? WHERE id = ?`).run(clientId, projectId);
+}
+
+/** Safe projection — never returns password_hash. */
+function safeClient(c: ClientRow): Omit<ClientRow, "password_hash"> {
+  return { id: c.id, name: c.name, email: c.email, created_at: c.created_at };
 }
 
