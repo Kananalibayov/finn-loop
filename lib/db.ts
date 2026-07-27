@@ -143,9 +143,23 @@ function db(): Database.Database {
       openai_api_key TEXT NOT NULL DEFAULT '',
       generation_model TEXT NOT NULL DEFAULT '',
       admin_password_hash TEXT NOT NULL DEFAULT '',
+      agency_name TEXT NOT NULL DEFAULT '',
+      agency_logo_url TEXT NOT NULL DEFAULT '',
+      primary_color TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
     );
   `);
+  // Guarded ALTER for existing app_settings rows predating branding columns.
+  const appCols = conn.prepare(`PRAGMA table_info(app_settings)`).all() as Array<{ name: string }>;
+  if (!appCols.some((c) => c.name === "agency_name")) {
+    conn.exec(`ALTER TABLE app_settings ADD COLUMN agency_name TEXT NOT NULL DEFAULT '';`);
+  }
+  if (!appCols.some((c) => c.name === "agency_logo_url")) {
+    conn.exec(`ALTER TABLE app_settings ADD COLUMN agency_logo_url TEXT NOT NULL DEFAULT '';`);
+  }
+  if (!appCols.some((c) => c.name === "primary_color")) {
+    conn.exec(`ALTER TABLE app_settings ADD COLUMN primary_color TEXT NOT NULL DEFAULT '';`);
+  }
   // AC-1 (issue #51): templates — the template library. Hybrid model:
   // spec_json holds the design spec (CSS vars + voice), pages_json holds
   // optional frozen HTML (Record<PageKey, html>); either or both may be set.
@@ -598,6 +612,9 @@ export interface AppSettingsRow {
   openai_api_key: string;
   generation_model: string;
   admin_password_hash: string;
+  agency_name: string;
+  agency_logo_url: string;
+  primary_color: string;
   updated_at: string;
 }
 
@@ -660,6 +677,47 @@ export function getEffectiveGenerationModel(): string {
   const dbModel = getAppSettings()?.generation_model ?? "";
   if (dbModel) return dbModel;
   return process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+}
+
+/** Branding helpers (issue #79: white-label). */
+export function getBranding(): {
+  agencyName: string;
+  agencyLogoUrl: string;
+  primaryColor: string;
+} {
+  const s = getAppSettings();
+  return {
+    agencyName: s?.agency_name || "Finn-Loop",
+    agencyLogoUrl: s?.agency_logo_url || "",
+    primaryColor: s?.primary_color || "#2563eb",
+  };
+}
+
+export function saveBranding(input: {
+  agencyName?: string;
+  agencyLogoUrl?: string;
+  primaryColor?: string;
+}): void {
+  const current = getAppSettings();
+  const merged = {
+    agencyName: input.agencyName ?? current?.agency_name ?? "",
+    agencyLogoUrl: input.agencyLogoUrl ?? current?.agency_logo_url ?? "",
+    primaryColor: input.primaryColor ?? current?.primary_color ?? "",
+  };
+  saveAppSettings({
+    openaiApiKey: current?.openai_api_key,
+    generationModel: current?.generation_model,
+    adminPasswordHash: current?.admin_password_hash,
+  });
+  // Direct update for branding-specific columns.
+  db()
+    .prepare(
+      `UPDATE app_settings SET agency_name = @agencyName, agency_logo_url = @agencyLogoUrl, primary_color = @primaryColor, updated_at = @updatedAt WHERE id = 1`,
+    )
+    .run({
+      ...merged,
+      updatedAt: new Date().toISOString(),
+    });
 }
 
 // --- Templates (issue #51: template library) ---

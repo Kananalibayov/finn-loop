@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 const STORAGE_KEY = "sidebar.collapsed";
 
 type OperatorProfile = { id: number; name: string; role: string };
+type Branding = { agencyName: string; agencyLogoUrl: string; primaryColor: string };
 
 type NavItem = {
   href: string;
@@ -96,12 +97,24 @@ export default function Sidebar({
   const pathname = usePathname() || "/";
   const [collapsed, setCollapsed] = useState(false);
   const [operator, setOperator] = useState<OperatorProfile | null>(null);
+  const [branding, setBranding] = useState<Branding | null>(null);
 
-  // AC-10 (issue #74): fetch the current operator's profile for the footer.
+  // Fetch operator profile + branding.
   useEffect(() => {
     fetch("/api/operators/me", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d) setOperator(d as OperatorProfile); })
+      .catch(() => {});
+    // Fetch branding.
+    fetch("/api/branding", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) {
+          setBranding(d as Branding);
+          // Override the primary color CSS variable.
+          document.documentElement.style.setProperty("--app-primary", d.primaryColor);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -146,8 +159,12 @@ export default function Sidebar({
       >
         {/* Brand block */}
         <div className="sidebar-brand">
-          <span className="sidebar-brand-mark">F</span>
-          <span className="sidebar-brand-name">Finn-Loop</span>
+          {branding?.agencyLogoUrl ? (
+            <img src={branding.agencyLogoUrl} alt={branding.agencyName} style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }} />
+          ) : (
+            <span className="sidebar-brand-mark">{(branding?.agencyName ?? "F").charAt(0).toUpperCase()}</span>
+          )}
+          <span className="sidebar-brand-name">{branding?.agencyName ?? "Finn-Loop"}</span>
           <button
             type="button"
             className="sidebar-toggle"

@@ -106,8 +106,33 @@ export default function RequestsPage() {
                     style={{ width: "100%", marginTop: 8, padding: 8, borderRadius: 8, border: "1px solid var(--app-border)", fontSize: 13, minHeight: 50 }}
                   />
                   <div className="project-card-actions">
-                    <button className="btn-primary" onClick={() => handleAction(r.id, "approved")} disabled={acting === r.id}>
-                      {acting === r.id ? "…" : "Approve"}
+                    <button
+                      className="btn-primary"
+                      onClick={async () => {
+                        setActing(r.id);
+                        setError(null);
+                        try {
+                          const res = await fetch(`/api/change-requests/${r.id}/apply`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ pushToWp: true }),
+                          });
+                          const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; pushed?: number };
+                          if (!res.ok || !data.ok) throw new Error(data?.error || `Apply failed (HTTP ${res.status}).`);
+                          await load();
+                        } catch (e) {
+                          setError((e as Error).message);
+                        } finally {
+                          setActing(null);
+                        }
+                      }}
+                      disabled={acting === r.id}
+                      title="Apply the client's instruction via AI editing, save as new version, and push to WordPress"
+                    >
+                      {acting === r.id ? "Applying…" : "Apply via AI + Push"}
+                    </button>
+                    <button className="btn-secondary" onClick={() => handleAction(r.id, "approved")} disabled={acting === r.id}>
+                      Approve
                     </button>
                     <button className="btn-secondary" onClick={() => handleAction(r.id, "rejected")} disabled={acting === r.id}>
                       Reject
