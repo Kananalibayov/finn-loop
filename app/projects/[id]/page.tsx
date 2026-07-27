@@ -58,6 +58,12 @@ export default function ProjectPreviewPage() {
   const [editInput, setEditInput] = useState<BusinessInput | null>(null);
   const [regenerating, setRegenerating] = useState(false);
 
+  // NL edit state (issue #71).
+  const [nlInstruction, setNlInstruction] = useState("");
+  const [nlPreview, setNlPreview] = useState<string | null>(null);
+  const [nlEditing, setNlEditing] = useState(false);
+  const [nlApplying, setNlApplying] = useState(false);
+
   function setEditField<K extends keyof BusinessInput>(key: K, value: BusinessInput[K]) {
     setEditInput((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
@@ -419,6 +425,95 @@ export default function ProjectPreviewPage() {
           {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}
         </section>
       )}
+
+      {/* NL edit bar (issue #71) */}
+      <section className="card" style={{ marginBottom: 16 }}>
+        <h2>NL Edit</h2>
+        <p className="hint" style={{ marginBottom: 8 }}>
+          Describe a change in plain English. The AI edits the current page ({pages[activePage]?.title}). Preview before saving.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            value={nlInstruction}
+            onChange={(e) => setNlInstruction(e.target.value)}
+            placeholder="e.g. 'Change the hero heading to Premium Coffee and make the CTA green'"
+            style={{ flex: "1 1 300px", padding: "9px 11px", border: "1px solid var(--app-border)", borderRadius: 8, fontSize: 14 }}
+            disabled={nlEditing || nlApplying}
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{ width: "auto", marginTop: 0 }}
+            disabled={nlEditing || !nlInstruction.trim() || pages.length === 0}
+            onClick={async () => {
+              setNlEditing(true);
+              setError(null);
+              setNlPreview(null);
+              try {
+                const res = await fetch(`/api/projects/${id}/nl-edit`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ pageKey: pages[activePage]?.key, instruction: nlInstruction }),
+                });
+                const data = await res.json().catch(() => ({})) as { modifiedHtml?: string; error?: string };
+                if (!res.ok || !data.modifiedHtml) throw new Error(data?.error || `Edit failed (HTTP ${res.status}).`);
+                setNlPreview(data.modifiedHtml);
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setNlEditing(false);
+              }
+            }}
+          >
+            {nlEditing ? "Editing…" : "Preview change"}
+          </button>
+        </div>
+
+        {nlPreview && (
+          <div style={{ marginTop: 12 }}>
+            <div className="notice" style={{ marginBottom: 8 }}>
+              Preview ready. Apply to save as a new version, or discard.
+            </div>
+            <div className="preview-frame-wrap" style={{ marginBottom: 8 }}>
+              <iframe title="nl-preview" className="preview-frame" srcDoc={nlPreview} style={{ height: 300 }} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ width: "auto", marginTop: 0 }}
+                disabled={nlApplying}
+                onClick={async () => {
+                  setNlApplying(true);
+                  setError(null);
+                  try {
+                    const res = await fetch(`/api/projects/${id}/nl-edit/apply`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ pageKey: pages[activePage]?.key, modifiedHtml: nlPreview }),
+                    });
+                    const data = await res.json().catch(() => ({})) as { id?: number; error?: string };
+                    if (!res.ok || !data.id) throw new Error(data?.error || `Apply failed (HTTP ${res.status}).`);
+                    setNlPreview(null);
+                    setNlInstruction("");
+                    router.push(`/projects/${data.id}`);
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setNlApplying(false);
+                  }
+                }}
+              >
+                {nlApplying ? "Saving…" : "Save as new version"}
+              </button>
+              <button type="button" className="btn-secondary" style={{ width: "auto", marginTop: 0 }} onClick={() => setNlPreview(null)}>
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="card">
         <div className="preview-toolbar">
