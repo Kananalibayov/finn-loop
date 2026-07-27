@@ -25,6 +25,8 @@ export interface ProjectRow {
   /** AC-1 (issue #44): linked wp_connections row id (null = unlinked, falls
    *  back to legacy wp_settings on push). */
   wp_connection_id: number | null;
+  /** AC-2 (issue #68): linked client id (null = unassigned). */
+  client_id: number | null;
 }
 
 /** AC-7: configurable via DATABASE_FILE env, default data/app.db. */
@@ -76,27 +78,6 @@ function db(): Database.Database {
   if (!cols.some((c) => c.name === "wp_connection_id")) {
     conn.exec(`ALTER TABLE sites ADD COLUMN wp_connection_id INTEGER;`);
   }
-  // AC-1 (issue #62): guarded ALTERs for health-reporting columns on
-  // wp_connections. Idempotent — checks PRAGMA table_info each time.
-  const connCols = conn.prepare(`PRAGMA table_info(wp_connections)`).all() as Array<{ name: string }>;
-  if (!connCols.some((c) => c.name === "wp_version")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN wp_version TEXT;`);
-  }
-  if (!connCols.some((c) => c.name === "theme_name")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN theme_name TEXT;`);
-  }
-  if (!connCols.some((c) => c.name === "plugin_count")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN plugin_count INTEGER;`);
-  }
-  if (!connCols.some((c) => c.name === "health_score")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_score INTEGER;`);
-  }
-  if (!connCols.some((c) => c.name === "health_reported_at")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_reported_at TEXT;`);
-  }
-  if (!connCols.some((c) => c.name === "health_secret")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_secret TEXT;`);
-  }
   // AC-1 (issue #24): wp_settings — single-row table for WP connection creds.
   // id is always 1 (enforced by the helpers). Password stored as plaintext
   // (NG-1: single-operator tool on a Docker volume; encryption deferred).
@@ -121,6 +102,28 @@ function db(): Database.Database {
       created_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #62): guarded ALTERs for health-reporting columns on
+  // wp_connections. MUST run AFTER CREATE TABLE wp_connections above.
+  // Fix #85: previously these ran before the table existed → fresh-DB crash.
+  const connCols = conn.prepare(`PRAGMA table_info(wp_connections)`).all() as Array<{ name: string }>;
+  if (!connCols.some((c) => c.name === "wp_version")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN wp_version TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "theme_name")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN theme_name TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "plugin_count")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN plugin_count INTEGER;`);
+  }
+  if (!connCols.some((c) => c.name === "health_score")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_score INTEGER;`);
+  }
+  if (!connCols.some((c) => c.name === "health_reported_at")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_reported_at TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "health_secret")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_secret TEXT;`);
+  }
   // AC-1 (issue #34): wp_pairing_codes — one-time codes for plugin auto-connect.
   conn.exec(`
     CREATE TABLE IF NOT EXISTS wp_pairing_codes (
