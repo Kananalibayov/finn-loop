@@ -349,6 +349,9 @@ export default function SettingsPage() {
         </dl>
       </section>
 
+      {/* ---------------- Section 3.5: Branding ---------------- */}
+      <BrandingSection />
+
       {/* ---------------- Section 4: Advanced (legacy WP) ---------------- */}
       <section className="card">
         <h2>Advanced — Legacy fallback WordPress</h2>
@@ -428,5 +431,77 @@ export default function SettingsPage() {
         )}
       </section>
     </main>
+  );
+}
+
+/** Branding section (issue #79): agency name, logo, primary color. */
+function BrandingSection() {
+  const [data, setData] = useState({ agencyName: "", agencyLogoUrl: "", primaryColor: "#2563eb" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/branding", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/branding", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error(`Failed (HTTP ${res.status}).`);
+      const updated = await res.json();
+      setData(updated);
+      setResult("Branding saved — refresh to see changes across the app.");
+      setTimeout(() => setResult(null), 4000);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <h2>Branding</h2>
+      <p className="hint" style={{ marginBottom: 12 }}>Customize how the platform looks for your team and clients.</p>
+
+      <label htmlFor="an">Agency name</label>
+      <input id="an" type="text" value={data.agencyName}
+        onChange={(e) => setData((d) => ({ ...d, agencyName: e.target.value }))}
+        placeholder="My Agency" />
+
+      <label htmlFor="al">Logo URL <span className="hint">(upload via the logo uploader on /generate, then paste the URL here)</span></label>
+      <input id="al" type="url" value={data.agencyLogoUrl}
+        onChange={(e) => setData((d) => ({ ...d, agencyLogoUrl: e.target.value }))}
+        placeholder="/api/uploads/abc123.png" />
+
+      <label htmlFor="ac">Primary color</label>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input id="ac" type="color" value={data.primaryColor}
+          onChange={(e) => setData((d) => ({ ...d, primaryColor: e.target.value }))}
+          style={{ width: 50, height: 38, padding: 0, border: "1px solid var(--app-border)", borderRadius: 8, cursor: "pointer" }} />
+        <input type="text" value={data.primaryColor}
+          onChange={(e) => setData((d) => ({ ...d, primaryColor: e.target.value }))}
+          placeholder="#2563eb" style={{ flex: 1 }} />
+      </div>
+
+      <button type="button" className="btn-primary" onClick={handleSave} disabled={saving} style={{ width: "auto", marginTop: 16 }}>
+        {saving ? "Saving…" : "Save branding"}
+      </button>
+      {result && <div className="notice" style={{ marginTop: 12 }}>{result}</div>}
+      {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}
+    </section>
   );
 }
