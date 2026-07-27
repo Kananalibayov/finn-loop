@@ -167,6 +167,13 @@ function db(): Database.Database {
       conn.exec(`ALTER TABLE app_settings ADD COLUMN ${col} TEXT NOT NULL DEFAULT '';`);
     }
   }
+  // AC-2 (issue #88): Plesk integration config columns.
+  const pleskCols = ["plesk_url", "plesk_user", "plesk_password"];
+  for (const col of pleskCols) {
+    if (!appCols.some((c) => c.name === col)) {
+      conn.exec(`ALTER TABLE app_settings ADD COLUMN ${col} TEXT NOT NULL DEFAULT '';`);
+    }
+  }
   // AC-1 (issue #51): templates — the template library. Hybrid model:
   // spec_json holds the design spec (CSS vars + voice), pages_json holds
   // optional frozen HTML (Record<PageKey, html>); either or both may be set.
@@ -642,6 +649,9 @@ export interface AppSettingsRow {
   smtp_pass: string;
   smtp_from: string;
   notify_operator_email: string;
+  plesk_url: string;
+  plesk_user: string;
+  plesk_password: string;
   updated_at: string;
 }
 
@@ -1285,3 +1295,37 @@ export function getActivityStats(): {
   };
 }
 
+
+// --- Plesk integration (issue #88) ---
+
+/** Get Plesk connection config (or null if not configured). */
+export function getPleskConfig(): { pleskUrl: string; pleskUser: string; pleskPassword: string } | null {
+  const s = getAppSettings();
+  if (!s || !s.plesk_url || !s.plesk_user || !s.plesk_password) return null;
+  return {
+    pleskUrl: s.plesk_url,
+    pleskUser: s.plesk_user,
+    pleskPassword: s.plesk_password,
+  };
+}
+
+/** Save Plesk connection config. */
+export function savePleskSettings(input: {
+  pleskUrl?: string;
+  pleskUser?: string;
+  pleskPassword?: string;
+}): void {
+  const current = getAppSettings();
+  const values = {
+    plesk_url: input.pleskUrl ?? current?.plesk_url ?? "",
+    plesk_user: input.pleskUser ?? current?.plesk_user ?? "",
+  };
+  if (input.pleskPassword && input.pleskPassword.length > 0) {
+    (values as Record<string, string>).plesk_password = input.pleskPassword;
+  } else {
+    (values as Record<string, string>).plesk_password = current?.plesk_password ?? "";
+  }
+  db().prepare(
+    `UPDATE app_settings SET plesk_url = @plesk_url, plesk_user = @plesk_user, plesk_password = @plesk_password, updated_at = @updated_at WHERE id = 1`,
+  ).run({ ...values, updated_at: new Date().toISOString() });
+}
