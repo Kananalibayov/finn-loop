@@ -23,6 +23,7 @@ type Client = { id: number; name: string; email: string };
 export default function PortalDashboard() {
   const [client, setClient] = useState<Client | null>(null);
   const [projects, setProjects] = useState<ClientProject[]>([]);
+  const [requests, setRequests] = useState<Array<{ id: number; instruction: string; status: string; created_at: string; operator_notes: string | null }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,9 +31,11 @@ export default function PortalDashboard() {
     Promise.all([
       fetch("/api/portal/me", { cache: "no-store" }).then((r) => r.ok ? r.json() : null),
       fetch("/api/portal/projects", { cache: "no-store" }).then((r) => r.ok ? r.json() : []),
-    ]).then(([c, p]) => {
+      fetch("/api/portal/requests", { cache: "no-store" }).then((r) => r.ok ? r.json() : []),
+    ]).then(([c, p, reqs]) => {
       setClient(c);
       setProjects(Array.isArray(p) ? p : []);
+      setRequests(Array.isArray(reqs) ? reqs : []);
       setLoading(false);
     }).catch((e) => {
       setError((e as Error).message);
@@ -94,6 +97,63 @@ export default function PortalDashboard() {
             )}
           </div>
         ))
+      )}
+
+      {/* Change requests */}
+      <section className="card" style={{ marginTop: 16 }}>
+        <h2>Request a Change</h2>
+        <p className="hint" style={{ marginBottom: 12 }}>Describe what you'd like changed on your site. Your agency will review and apply it.</p>
+        <textarea
+          id="change-request-input"
+          placeholder="e.g. 'Update the phone number to +1 (555) 123-4567 and add our new location to the contact page'"
+          style={{ width: "100%", minHeight: 80, padding: 10, borderRadius: 8, border: "1px solid var(--app-border)", fontSize: 14 }}
+        />
+        <button
+          type="button"
+          className="btn-primary"
+          style={{ marginTop: 8 }}
+          onClick={async () => {
+            const el = document.getElementById("change-request-input") as HTMLTextAreaElement;
+            const instruction = el.value.trim();
+            if (!instruction || !projects[0]?.id) return;
+            try {
+              const res = await fetch("/api/portal/requests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ projectId: projects[0].id, instruction }),
+              });
+              if (res.ok) {
+                el.value = "";
+                // Reload requests
+                setRequests(await (await fetch("/api/portal/requests", { cache: "no-store" })).json());
+              }
+            } catch { /* non-fatal */ }
+          }}
+        >
+          Submit request
+        </button>
+      </section>
+
+      {/* Change request history */}
+      {requests.length > 0 && (
+        <section className="card" style={{ marginTop: 16 }}>
+          <h2>Your Requests</h2>
+          <ul className="site-list">
+            {requests.map((r) => {
+              const badge = r.status === "pending" ? "badge--warning" : r.status === "completed" || r.status === "approved" ? "badge--wp-pushed" : "badge--theme";
+              return (
+                <li key={r.id} className="site-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
+                    <span className={`badge ${badge}`}>{r.status}</span>
+                    <span className="hint" style={{ marginLeft: "auto" }}>{new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <span style={{ fontSize: 14 }}>{r.instruction}</span>
+                  {r.operator_notes && <span className="hint" style={{ fontSize: 12 }}>↳ {r.operator_notes}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       {/* Account */}
