@@ -352,6 +352,9 @@ export default function SettingsPage() {
       {/* ---------------- Section 3.5: Branding ---------------- */}
       <BrandingSection />
 
+      {/* Email settings (issue #81) */}
+      <EmailSection />
+
       {/* ---------------- Section 4: Advanced (legacy WP) ---------------- */}
       <section className="card">
         <h2>Advanced — Legacy fallback WordPress</h2>
@@ -500,6 +503,118 @@ function BrandingSection() {
       <button type="button" className="btn-primary" onClick={handleSave} disabled={saving} style={{ width: "auto", marginTop: 16 }}>
         {saving ? "Saving…" : "Save branding"}
       </button>
+      {result && <div className="notice" style={{ marginTop: 12 }}>{result}</div>}
+      {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}
+    </section>
+  );
+}
+
+/** Email settings section (issue #81). */
+function EmailSection() {
+  const [cfg, setCfg] = useState({ smtpHost: "", smtpPort: "587", smtpUser: "", smtpPass: "", smtpFrom: "", notifyOperatorEmail: "" });
+  const [hasPass, setHasPass] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/email-settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { setCfg(d); setHasPass(d.hasPassword); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/email-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      });
+      if (!res.ok) throw new Error(`Failed (HTTP ${res.status}).`);
+      setResult("Email settings saved.");
+      setTimeout(() => setResult(null), 4000);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    setTesting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/email-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: cfg.notifyOperatorEmail || cfg.smtpUser }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data?.error || "Test failed.");
+      setResult("Test email sent ✓");
+      setTimeout(() => setResult(null), 4000);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <h2>Email / SMTP</h2>
+      <p className="hint" style={{ marginBottom: 12 }}>Configure SMTP to send notifications (change requests, completions). Use your Hostinger/Plesk SMTP credentials.</p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 8 }}>
+        <div>
+          <label htmlFor="sh">SMTP host</label>
+          <input id="sh" type="text" value={cfg.smtpHost}
+            onChange={(e) => setCfg((c) => ({ ...c, smtpHost: e.target.value }))}
+            placeholder="smtp.hostinger.com" />
+        </div>
+        <div>
+          <label htmlFor="sp">Port</label>
+          <input id="sp" type="number" value={cfg.smtpPort}
+            onChange={(e) => setCfg((c) => ({ ...c, smtpPort: e.target.value }))} />
+        </div>
+      </div>
+
+      <label htmlFor="su">SMTP user (email)</label>
+      <input id="su" type="email" value={cfg.smtpUser}
+        onChange={(e) => setCfg((c) => ({ ...c, smtpUser: e.target.value }))}
+        placeholder="you@agency.com" />
+
+      <label htmlFor="spw">SMTP password {hasPass && <span className="hint">(saved — type to replace)</span>}</label>
+      <input id="spw" type="password" value={cfg.smtpPass}
+        onChange={(e) => setCfg((c) => ({ ...c, smtpPass: e.target.value }))}
+        placeholder={hasPass ? "•••••• (saved)" : "your SMTP password"} autoComplete="off" />
+
+      <label htmlFor="sf">From address</label>
+      <input id="sf" type="email" value={cfg.smtpFrom}
+        onChange={(e) => setCfg((c) => ({ ...c, smtpFrom: e.target.value }))}
+        placeholder="noreply@agency.com" />
+
+      <label htmlFor="ne">Notify operator email</label>
+      <input id="ne" type="email" value={cfg.notifyOperatorEmail}
+        onChange={(e) => setCfg((c) => ({ ...c, notifyOperatorEmail: e.target.value }))}
+        placeholder="alerts@agency.com" />
+      <span className="hint">Where new change-request alerts are sent.</span>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button type="button" className="btn-primary" style={{ width: "auto" }} onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" className="btn-secondary" style={{ width: "auto" }} onClick={handleTest} disabled={testing || !cfg.smtpHost}>
+          {testing ? "Sending…" : "Send test email"}
+        </button>
+      </div>
       {result && <div className="notice" style={{ marginTop: 12 }}>{result}</div>}
       {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}
     </section>

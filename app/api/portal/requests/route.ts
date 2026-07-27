@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, verifySessionRole } from "@/lib/auth";
 import { createChangeRequest, listChangeRequestsForClient, logActivity } from "@/lib/db";
+import { notifyOperatorChangeRequest } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +49,15 @@ export async function POST(req: NextRequest) {
     clientId: session.clientId,
     projectId: body.projectId as number,
   });
+
+  // Notify operator (best-effort, non-blocking).
+  const { getClientById, getProject } = await import("@/lib/db");
+  const client = getClientById(session.clientId);
+  const project = getProject(body.projectId as number);
+  if (client && project) {
+    notifyOperatorChangeRequest(instruction, client.name, project.business_name).catch(() => {});
+  }
+
   const { client_id: _cid, ...safe } = row;
   return NextResponse.json(safe, { status: 201 });
 }

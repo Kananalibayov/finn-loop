@@ -10,6 +10,7 @@ import {
   getWpConnection,
 } from "@/lib/db";
 import { applyEdit } from "@/lib/nl-edit";
+import { notifyClientRequestCompleted } from "@/lib/email";
 import { WpClient } from "@/lib/wp";
 import type { GeneratedPage, PageKey } from "@/lib/types";
 
@@ -89,6 +90,13 @@ export async function POST(
 
   // Mark the request completed.
   resolveChangeRequest(num, "completed", `Applied as project #${newProjectId}`);
+
+  // Notify client (best-effort).
+  const { getClientById } = await import("@/lib/db");
+  const client = getClientById(cr.client_id);
+  if (client) {
+    notifyClientRequestCompleted(client.email, client.name, cr.instruction).catch(() => {});
+  }
 
   // Optionally push to WP.
   let pushed = 0;

@@ -160,6 +160,13 @@ function db(): Database.Database {
   if (!appCols.some((c) => c.name === "primary_color")) {
     conn.exec(`ALTER TABLE app_settings ADD COLUMN primary_color TEXT NOT NULL DEFAULT '';`);
   }
+  // AC-1 (issue #81): SMTP config columns.
+  const smtpCols = ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from", "notify_operator_email"];
+  for (const col of smtpCols) {
+    if (!appCols.some((c) => c.name === col)) {
+      conn.exec(`ALTER TABLE app_settings ADD COLUMN ${col} TEXT NOT NULL DEFAULT '';`);
+    }
+  }
   // AC-1 (issue #51): templates — the template library. Hybrid model:
   // spec_json holds the design spec (CSS vars + voice), pages_json holds
   // optional frozen HTML (Record<PageKey, html>); either or both may be set.
@@ -629,6 +636,12 @@ export interface AppSettingsRow {
   agency_name: string;
   agency_logo_url: string;
   primary_color: string;
+  smtp_host: string;
+  smtp_port: string;
+  smtp_user: string;
+  smtp_pass: string;
+  smtp_from: string;
+  notify_operator_email: string;
   updated_at: string;
 }
 
@@ -691,6 +704,39 @@ export function getEffectiveGenerationModel(): string {
   const dbModel = getAppSettings()?.generation_model ?? "";
   if (dbModel) return dbModel;
   return process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+}
+
+/** Branding helpers (issue #79: white-label). */
+/** AC-1 (issue #81): save SMTP settings directly (not covered by saveAppSettings). */
+export function saveEmailSettings(input: {
+  smtpHost?: string;
+  smtpPort?: string;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpFrom?: string;
+  notifyOperatorEmail?: string;
+}): void {
+  const current = getAppSettings() as Record<string, string> | null;
+  const values: Record<string, string> = {
+    smtp_host: input.smtpHost ?? current?.smtp_host ?? "",
+    smtp_port: input.smtpPort ?? current?.smtp_port ?? "587",
+    smtp_user: input.smtpUser ?? current?.smtp_user ?? "",
+    smtp_from: input.smtpFrom ?? current?.smtp_from ?? "",
+    notify_operator_email: input.notifyOperatorEmail ?? current?.notify_operator_email ?? "",
+  };
+  if (input.smtpPass && input.smtpPass.length > 0) {
+    values.smtp_pass = input.smtpPass;
+  } else {
+    values.smtp_pass = current?.smtp_pass ?? "";
+  }
+  db().prepare(
+    `UPDATE app_settings SET
+      smtp_host = @smtp_host, smtp_port = @smtp_port, smtp_user = @smtp_user,
+      smtp_pass = @smtp_pass, smtp_from = @smtp_from,
+      notify_operator_email = @notify_operator_email,
+      updated_at = @updated_at
+    WHERE id = 1`,
+  ).run({ ...values, updated_at: new Date().toISOString() });
 }
 
 /** Branding helpers (issue #79: white-label). */
