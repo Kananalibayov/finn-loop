@@ -196,6 +196,19 @@ function db(): Database.Database {
       created_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #70): change_requests — client → operator workflow.
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS change_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL,
+      project_id INTEGER NOT NULL,
+      instruction TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      operator_notes TEXT,
+      created_at TEXT NOT NULL,
+      resolved_at TEXT
+    );
+  `);
   // AC-2 (issue #68): guarded ALTER — link sites to a client (nullable).
   const sitesCols = conn.prepare(`PRAGMA table_info(sites)`).all() as Array<{ name: string }>;
   if (!sitesCols.some((c) => c.name === "client_id")) {
@@ -988,5 +1001,83 @@ export function deleteOperator(id: number): boolean {
 export function countAdmins(): number {
   const row = db().prepare(`SELECT COUNT(*) as n FROM operators WHERE role = 'admin'`).get() as { n: number };
   return row.n;
+}
+
+// --- Change requests (issue #70: client → operator workflow) ---
+
+export interface ChangeRequestRow {
+  id: number;
+  client_id: number;
+  project_id: number;
+  instruction: string;
+  status: string; // pending | approved | rejected | completed
+  operator_notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export function createChangeRequest(input: {
+  clientId: number;
+  projectId: number;
+  instruction: string;
+}): ChangeRequestRow {
+  const now = new Date().toISOString();
+  const info = db()
+    .prepare(
+      `INSERT INTO change_requests (client_id, project_id, instruction, status, created_at)
+       VALUES (@clientId, @projectId, @instruction, 'pending', @createdAt)`,
+    )
+    .run({
+      clientId: input.clientId,
+      projectId: input.projectId,
+      instruction: input.instruction,
+      createdAt: now,
+    });
+  return getChangeRequestById(Number(info.lastInsertRowid))!;
+}
+
+export function getChangeRequestById(id: number): ChangeRequestRow | null {
+  const row = db().prepare(`SELECT * FROM change_requests WHERE id = ?`).get(id) as ChangeRequestRow | undefined;
+  return row ?? null;
+}
+
+/** List all change requests (for operator dashboard). */
+export function listChangeRequests(): Array<ChangeRequestRow & { client_name: string; business_name: string }> {
+  return db()
+    .prepare(
+      `SELECT cr.*, c.name AS client_name, s.business_name
+       FROM change_requests cr
+       JOIN clients c ON cr.client_id = c.id
+       JOIN sites s ON cr.project_id = s.id
+       ORDER BY cr.id DESC`,
+    )
+    .all() as Array<ChangeRequestRow & { client_name: string; business_name: string }>;
+}
+
+/** List change requests for a specific client (for the portal). */
+export function listChangeRequestsForClient(clientId: number): Array<ChangeRequestRow & { business_name: string }> {
+  return db()
+    .prepare(
+      `SELECT cr.*, s.business_name
+       FROM change_requests cr
+       JOIN sites s ON cr.project_id = s.id
+       WHERE cr.client_id = ?
+       ORDER BY cr.id DESC`,
+    )
+    .all(clientId) as Array<ChangeRequestRow & { business_name: string }>;
+}
+
+export function resolveChangeRequest(
+  id: number,
+  status: string,
+  operatorNotes: string | null,
+): ChangeRequestRow | null {
+  const now = new Date().toISOString();
+  db()
+    .prepare(
+      `UPDATE change_requests SET status = ?, operator_notes = ?, resolved_at = ? WHERE id = ?`,
+    )
+    .run(status, operatorNotes, now, id);
+  return getChangeRequestById(id);
 }
 
