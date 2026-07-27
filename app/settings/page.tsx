@@ -355,6 +355,9 @@ export default function SettingsPage() {
       {/* Email settings (issue #81) */}
       <EmailSection />
 
+      {/* Plesk integration (issue #88) */}
+      <PleskSection />
+
       {/* ---------------- Section 4: Advanced (legacy WP) ---------------- */}
       <section className="card">
         <h2>Advanced — Legacy fallback WordPress</h2>
@@ -613,6 +616,85 @@ function EmailSection() {
         </button>
         <button type="button" className="btn-secondary" style={{ width: "auto" }} onClick={handleTest} disabled={testing || !cfg.smtpHost}>
           {testing ? "Sending…" : "Send test email"}
+        </button>
+      </div>
+      {result && <div className="notice" style={{ marginTop: 12 }}>{result}</div>}
+      {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}
+    </section>
+  );
+}
+
+/** Plesk integration section (issue #88). */
+function PleskSection() {
+  const [cfg, setCfg] = useState({ pleskUrl: "", pleskUser: "", pleskPassword: "" });
+  const [hasPass, setHasPass] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/plesk/settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { setCfg(d); setHasPass(d.hasPassword); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    setSaving(true); setError(null);
+    try {
+      const res = await fetch("/api/plesk/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      });
+      if (!res.ok) throw new Error(`Failed (HTTP ${res.status}).`);
+      setResult("Saved."); setTimeout(() => setResult(null), 3000);
+    } catch (e) { setError((e as Error).message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleTest() {
+    setTesting(true); setError(null);
+    try {
+      const res = await fetch("/api/plesk/test", { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; hostname?: string; version?: string; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data?.error || "Test failed.");
+      setResult(`Connected ✓ ${data.hostname} (v${data.version})`);
+      setTimeout(() => setResult(null), 5000);
+    } catch (e) { setError((e as Error).message); }
+    finally { setTesting(false); }
+  }
+
+  if (loading) return null;
+
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <h2>Plesk Integration</h2>
+      <p className="hint" style={{ marginBottom: 12 }}>Connect to your Plesk server to auto-provision WordPress sites for clients.</p>
+
+      <label htmlFor="pu">Plesk URL</label>
+      <input id="pu" type="url" value={cfg.pleskUrl}
+        onChange={(e) => setCfg((c) => ({ ...c, pleskUrl: e.target.value }))}
+        placeholder="https://your-server.com:8443" />
+
+      <label htmlFor="puser">Admin user (or API token user)</label>
+      <input id="puser" type="text" value={cfg.pleskUser}
+        onChange={(e) => setCfg((c) => ({ ...c, pleskUser: e.target.value }))}
+        placeholder="admin" />
+
+      <label htmlFor="ppw">Password / API token {hasPass && <span className="hint">(saved — type to replace)</span>}</label>
+      <input id="ppw" type="password" value={cfg.pleskPassword}
+        onChange={(e) => setCfg((c) => ({ ...c, pleskPassword: e.target.value }))}
+        placeholder={hasPass ? "•••••• (saved)" : "your Plesk admin password or API token"} autoComplete="off" />
+
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button type="button" className="btn-primary" style={{ width: "auto" }} onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" className="btn-secondary" style={{ width: "auto" }} onClick={handleTest} disabled={testing || !cfg.pleskUrl}>
+          {testing ? "Testing…" : "Test connection"}
         </button>
       </div>
       {result && <div className="notice" style={{ marginTop: 12 }}>{result}</div>}
