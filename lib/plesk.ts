@@ -1,20 +1,14 @@
 // Plesk REST API v2 client.
-// Communicates with Plesk Obsidian's /api/v2/ endpoints to auto-provision
-// WordPress sites for clients during onboarding.
-//
-// NOTE: Plesk servers often use self-signed certificates. Node's fetch rejects
-// these by default. We use a custom https agent (rejectUnauthorized: false) to
-// work around this — acceptable for a server-to-server call to a known host.
+// Uses node:https directly (not fetch) because Plesk uses self-signed certs
+// and Node's fetch doesn't support rejectUnauthorized: false.
 
-import { Agent } from "node:https";
-
-// Reuse a single agent instance.
-const httpsAgent = new Agent({ rejectUnauthorized: false });
+import https from "node:https";
+import { URL } from "node:url";
 
 export interface PleskConfig {
-  pleskUrl: string; // e.g. https://silly-darwin.66-179-240-64.plesk.page:8443
-  pleskUser: string; // admin or API token user
-  pleskPassword: string; // password or API token
+  pleskUrl: string;
+  pleskUser: string;
+  pleskPassword: string;
 }
 
 export interface PleskServerInfo {
@@ -25,7 +19,7 @@ export interface PleskServerInfo {
 export interface PleskSubscription {
   id: number;
   guid: string;
-  name: string; // domain name
+  name: string;
 }
 
 export interface PleskWpInstance {
@@ -35,52 +29,60 @@ export interface PleskWpInstance {
 }
 
 const TIMEOUT_MS = 30_000;
-const USER_AGENT = "FinnLoopPlatform/1.0 (Plesk integration; agency auto-provisioning)";
 
-/** Fetch wrapper for Plesk REST API v2. */
-async function pleskFetch(
+/** Low-level Plesk API call using https.request (supports self-signed certs). */
+function pleskRequest(
   config: PleskConfig,
   path: string,
   options: { method: string; body?: unknown } = { method: "GET" },
-): Promise<Response> {
-  const base = config.pleskUrl.replace(/\/+$/, "");
-  const url = `${base}/api/v2${path}`;
-  const basic = Buffer.from(`${config.pleskUser}:${config.pleskPassword}`).toString("base64");
+): Promise<{ status: number; data: unknown; text: string }> {
+  return new Promise((resolve, reject) => {
+    const base = config.pleskUrl.replace(/\/+$/, "");
+    const fullUrl = new URL(`${base}/api/v2${path}`);
+    const basic = Buffer.from(`${config.pleskUser}:${config.pleskPassword}`).toString("base64");
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  try {
-    return await fetch(url, {
+    const reqOptions = {
+      hostname: fullUrl.hostname,
+      port: fullUrl.port || 8443,
+      path: fullUrl.pathname + fullUrl.search,
       method: options.method,
+      rejectUnauthorized: false,
       headers: {
         Authorization: `Basic ${basic}`,
         "Content-Type": "application/json",
         Accept: "application/json",
-        "User-Agent": USER_AGENT,
+        "User-Agent": "FinnLoopPlatform/1.0",
+        ...(options.body ? { "Content-Length": Buffer.byteLength(JSON.stringify(options.body)) } : {}),
       },
-      body: options.body ? JSON.stringify(options.body) : undefined,
-      signal: controller.signal,
-      // @ts-expect-error — Node's fetch supports `dispatcher`/`agent` but types vary.
-      agent: httpsAgent,
+    };
+
+    const req = https.request(reqOptions, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        let parsed: unknown = null;
+        try { parsed = JSON.parse(data); } catch { /* not JSON */ }
+        resolve({ status: res.statusCode ?? 0, data: parsed, text: data });
+      });
     });
-  } finally {
-    clearTimeout(timer);
-  }
+
+    req.on("error", (e) => reject(new Error(`Plesk request failed: ${e.message}`)));
+    req.setTimeout(TIMEOUT_MS, () => { req.destroy(); reject(new Error("Plesk request timed out.")); });
+
+    if (options.body) {
+      req.write(JSON.stringify(options.body));
+    }
+    req.end();
+  });
 }
 
 /** Test the connection — calls GET /api/v2/server. */
 export async function testPleskConnection(config: PleskConfig): Promise<PleskServerInfo> {
-  const res = await pleskFetch(config, "/server");
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Plesk returned HTTP ${res.status}: ${body.substring(0, 200)}`);
+  const res = await pleskRequest(config, "/server");
+  if (res.status !== 200) {
+    throw new Error(`Plesk returned HTTP ${res.status}: ${res.text.substring(0, 200)}`);
   }
-  const data = (await res.json()) as {
-    hostname?: string;
-    panel_version?: string;
-    platform?: string;
-  };
+  const data = res.data as { hostname?: string; panel_version?: string };
   return {
     hostname: data.hostname ?? "unknown",
     version: data.panel_version ?? "unknown",
@@ -92,25 +94,19 @@ export async function createSubscription(
   config: PleskConfig,
   input: { domain: string; adminEmail?: string },
 ): Promise<PleskSubscription> {
-  const res = await pleskFetch(config, "/subscriptions", {
+  const res = await pleskRequest(config, "/subscriptions", {
     method: "POST",
     body: {
       name: input.domain,
-      // Use default service plan (empty = default).
       service_plan: {},
-      properties: {
-        ftp_login: `wp_${Math.random().toString(36).substring(2, 10)}`,
-        ftp_password: generateTempPassword(),
-      },
     },
   });
 
-  if (!res.ok && res.status !== 201) {
-    const body = await res.text();
-    throw new Error(`Failed to create subscription for ${input.domain}: HTTP ${res.status}: ${body.substring(0, 300)}`);
+  if (res.status !== 201 && res.status !== 200) {
+    throw new Error(`Failed to create subscription for ${input.domain}: HTTP ${res.status}: ${res.text.substring(0, 300)}`);
   }
 
-  const data = (await res.json()) as { id?: number; guid?: string; name?: string };
+  const data = res.data as { id?: number; guid?: string; name?: string };
   return {
     id: data.id ?? 0,
     guid: data.guid ?? "",
@@ -123,8 +119,7 @@ export async function installWordPress(
   config: PleskConfig,
   input: { domain: string; adminEmail: string; title?: string },
 ): Promise<PleskWpInstance> {
-  // Plesk REST API v2: POST /api/v2/wp-instances
-  const res = await pleskFetch(config, "/wp-instances", {
+  const res = await pleskRequest(config, "/wp-instances", {
     method: "POST",
     body: {
       domain: input.domain,
@@ -134,18 +129,14 @@ export async function installWordPress(
       version: "latest",
       admin_name: "admin",
       admin_password: generateTempPassword(),
-      database: {
-        // Let Plesk auto-create the DB.
-      },
     },
   });
 
-  if (!res.ok && res.status !== 201) {
-    const body = await res.text();
-    throw new Error(`Failed to install WordPress on ${input.domain}: HTTP ${res.status}: ${body.substring(0, 300)}`);
+  if (res.status !== 201 && res.status !== 200) {
+    throw new Error(`Failed to install WordPress on ${input.domain}: HTTP ${res.status}: ${res.text.substring(0, 300)}`);
   }
 
-  const data = (await res.json()) as { id?: number; domain?: string; url?: string };
+  const data = res.data as { id?: number; domain?: string; url?: string };
   return {
     id: data.id ?? 0,
     domain: data.domain ?? input.domain,
@@ -158,20 +149,15 @@ export async function provisionWpSite(
   config: PleskConfig,
   input: { domain: string; wpEmail: string; wpTitle?: string },
 ): Promise<{ subscription: PleskSubscription; wpInstance: PleskWpInstance }> {
-  // Step 1: create the subscription (domain space).
   const subscription = await createSubscription(config, { domain: input.domain });
-
-  // Step 2: install WordPress.
   const wpInstance = await installWordPress(config, {
     domain: input.domain,
     adminEmail: input.wpEmail,
     title: input.wpTitle,
   });
-
   return { subscription, wpInstance };
 }
 
-/** Generate a temporary password for WP admin / FTP. */
 function generateTempPassword(): string {
   const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#";
   let pw = "";
