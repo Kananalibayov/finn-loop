@@ -48,8 +48,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/portal", req.url));
   }
 
-  if (session?.role === "admin") {
-    // Operators can access everything EXCEPT /portal/* (that's for clients).
+  if (session?.role === "admin" || session?.role === "operator") {
+    // Operators (both legacy admin + new operator accounts) get dashboard access.
     if (isPortalPath) {
       return NextResponse.redirect(new URL("/", req.url));
     }

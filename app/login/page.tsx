@@ -13,6 +13,7 @@ function LoginForm() {
   const search = useSearchParams();
   const next = search.get("next") || "/";
 
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,10 +23,10 @@ function LoginForm() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/login", {
+      const res = await fetch("/api/operators/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, next }),
+        body: JSON.stringify({ email: email || undefined, password, next }),
       });
       if (res.ok) {
         const data = (await res.json()) as { redirect: string };
@@ -44,8 +45,17 @@ function LoginForm() {
 
   return (
     <form className="card login-card" onSubmit={handleSubmit}>
-      <h1>Admin login</h1>
-      <p className="login-sub">Sign in to manage generated sites.</p>
+      <h1>Agency Login</h1>
+      <p className="login-sub">Sign in to manage sites, templates, and clients.</p>
+
+      <label htmlFor="em">Email <span className="hint">(team members)</span></label>
+      <input
+        id="em"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@agency.com (or leave blank for admin)"
+      />
 
       <label htmlFor="pw">Password</label>
       <input

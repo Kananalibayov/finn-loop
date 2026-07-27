@@ -72,6 +72,19 @@ export async function createClientSessionCookie(clientId: number): Promise<strin
   return `${SESSION_COOKIE}=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}`;
 }
 
+/** AC-2 (issue #74): mint an OPERATOR session JWT with operatorId + role. */
+export async function createOperatorSessionCookie(
+  operatorId: number,
+  operatorRole: string,
+): Promise<string> {
+  const token = await new SignJWT({ role: "operator", operatorId, operatorRole })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
+    .sign(sessionSecret());
+  return `${SESSION_COOKIE}=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}`;
+}
+
 /** Cookie name, exposed for the logout route. */
 export const COOKIE_NAME = SESSION_COOKIE;
 
@@ -90,13 +103,15 @@ export async function verifySession(token: string | undefined | null): Promise<b
  *  Returns null if invalid/expired. Used by middleware + portal routes. */
 export async function verifySessionRole(
   token: string | undefined | null,
-): Promise<{ role: string; clientId?: number } | null> {
+): Promise<{ role: string; clientId?: number; operatorId?: number; operatorRole?: string } | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, sessionSecret());
     const role = (payload as { role?: string }).role ?? "admin";
     const clientId = (payload as { clientId?: number }).clientId;
-    return { role, clientId };
+    const operatorId = (payload as { operatorId?: number }).operatorId;
+    const operatorRole = (payload as { operatorRole?: string }).operatorRole;
+    return { role, clientId, operatorId, operatorRole };
   } catch {
     return null;
   }
