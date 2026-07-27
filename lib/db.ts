@@ -185,6 +185,17 @@ function db(): Database.Database {
       created_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #74): operators — team accounts with role-based access.
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS operators (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'editor',
+      created_at TEXT NOT NULL
+    );
+  `);
   // AC-2 (issue #68): guarded ALTER — link sites to a client (nullable).
   const sitesCols = conn.prepare(`PRAGMA table_info(sites)`).all() as Array<{ name: string }>;
   if (!sitesCols.some((c) => c.name === "client_id")) {
@@ -916,5 +927,66 @@ export function listProjectsForClient(clientId: number): Array<{
 /** Safe projection — never returns password_hash. */
 function safeClient(c: ClientRow): Omit<ClientRow, "password_hash"> {
   return { id: c.id, name: c.name, email: c.email, created_at: c.created_at };
+}
+
+// --- Operators (issue #74: multi-user team access) ---
+
+export interface OperatorRow {
+  id: number;
+  name: string;
+  email: string;
+  password_hash: string;
+  role: string;
+  created_at: string;
+}
+
+export function createOperator(input: {
+  name: string;
+  email: string;
+  passwordHash: string;
+  role: string;
+}): OperatorRow {
+  const now = new Date().toISOString();
+  const info = db()
+    .prepare(
+      `INSERT INTO operators (name, email, password_hash, role, created_at)
+       VALUES (@name, @email, @passwordHash, @role, @createdAt)`,
+    )
+    .run({
+      name: input.name,
+      email: input.email.toLowerCase().trim(),
+      passwordHash: input.passwordHash,
+      role: input.role,
+      createdAt: now,
+    });
+  return getOperatorById(Number(info.lastInsertRowid))!;
+}
+
+export function getOperatorByEmail(email: string): OperatorRow | null {
+  const row = db()
+    .prepare(`SELECT * FROM operators WHERE email = ?`)
+    .get(email.toLowerCase().trim()) as OperatorRow | undefined;
+  return row ?? null;
+}
+
+export function getOperatorById(id: number): OperatorRow | null {
+  const row = db().prepare(`SELECT * FROM operators WHERE id = ?`).get(id) as OperatorRow | undefined;
+  return row ?? null;
+}
+
+export function listOperators(): Array<Omit<OperatorRow, "password_hash">> {
+  return db()
+    .prepare(`SELECT id, name, email, role, created_at FROM operators ORDER BY id DESC`)
+    .all() as Array<Omit<OperatorRow, "password_hash">>;
+}
+
+export function deleteOperator(id: number): boolean {
+  const info = db().prepare(`DELETE FROM operators WHERE id = ?`).run(id);
+  return info.changes > 0;
+}
+
+export function countAdmins(): number {
+  const row = db().prepare(`SELECT COUNT(*) as n FROM operators WHERE role = 'admin'`).get() as { n: number };
+  return row.n;
 }
 

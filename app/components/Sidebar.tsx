@@ -20,6 +20,8 @@ import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "sidebar.collapsed";
 
+type OperatorProfile = { id: number; name: string; role: string };
+
 type NavItem = {
   href: string;
   label: string;
@@ -52,6 +54,7 @@ const GROUPS: NavGroup[] = [
     label: "Configure",
     items: [
       { href: "/clients", label: "Clients", icon: "👥" },
+      { href: "/operators", label: "Team", icon: "🔐" },
       { href: "/settings", label: "Settings", icon: "⚙️" },
     ],
   },
@@ -91,6 +94,15 @@ export default function Sidebar({
 }) {
   const pathname = usePathname() || "/";
   const [collapsed, setCollapsed] = useState(false);
+  const [operator, setOperator] = useState<OperatorProfile | null>(null);
+
+  // AC-10 (issue #74): fetch the current operator's profile for the footer.
+  useEffect(() => {
+    fetch("/api/operators/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setOperator(d as OperatorProfile); })
+      .catch(() => {});
+  }, []);
 
   // AC-2: initialize from sessionStorage after mount (avoid SSR mismatch).
   useEffect(() => {
@@ -171,12 +183,14 @@ export default function Sidebar({
           ))}
         </nav>
 
-        {/* Account footer (NG-7: static placeholder, no user model yet) */}
+        {/* Account footer (AC-10 issue #74: dynamic operator profile) */}
         <div className="sidebar-footer">
-          <span className="sidebar-avatar" title="Operator">OP</span>
+          <span className="sidebar-avatar" title={operator?.name ?? "Operator"}>
+            {(operator?.name ?? "O").charAt(0).toUpperCase()}
+          </span>
           <div className="sidebar-footer-info">
-            <div className="sidebar-footer-name">Operator</div>
-            <div className="sidebar-footer-role">Admin</div>
+            <div className="sidebar-footer-name">{operator?.name ?? "Operator"}</div>
+            <div className="sidebar-footer-role">{operator?.role ?? "admin"}</div>
           </div>
         </div>
       </aside>
