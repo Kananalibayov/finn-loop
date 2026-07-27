@@ -38,6 +38,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "projectId is required." }, { status: 400 });
   }
 
+  // Fix #86: verify the project belongs to this client (multi-tenant isolation).
+  const { getProject } = await import("@/lib/db");
+  const project = getProject(body.projectId as number);
+  if (!project) {
+    return NextResponse.json({ error: "Project not found." }, { status: 404 });
+  }
+  if (project.client_id !== session.clientId) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
   const row = createChangeRequest({
     clientId: session.clientId,
     projectId: body.projectId as number,
@@ -51,10 +61,9 @@ export async function POST(req: NextRequest) {
   });
 
   // Notify operator (best-effort, non-blocking).
-  const { getClientById, getProject } = await import("@/lib/db");
+  const { getClientById } = await import("@/lib/db");
   const client = getClientById(session.clientId);
-  const project = getProject(body.projectId as number);
-  if (client && project) {
+  if (client) {
     notifyOperatorChangeRequest(instruction, client.name, project.business_name).catch(() => {});
   }
 

@@ -25,6 +25,8 @@ export interface ProjectRow {
   /** AC-1 (issue #44): linked wp_connections row id (null = unlinked, falls
    *  back to legacy wp_settings on push). */
   wp_connection_id: number | null;
+  /** AC-2 (issue #68): linked client id (null = unassigned). */
+  client_id: number | null;
 }
 
 /** AC-7: configurable via DATABASE_FILE env, default data/app.db. */
@@ -76,27 +78,6 @@ function db(): Database.Database {
   if (!cols.some((c) => c.name === "wp_connection_id")) {
     conn.exec(`ALTER TABLE sites ADD COLUMN wp_connection_id INTEGER;`);
   }
-  // AC-1 (issue #62): guarded ALTERs for health-reporting columns on
-  // wp_connections. Idempotent — checks PRAGMA table_info each time.
-  const connCols = conn.prepare(`PRAGMA table_info(wp_connections)`).all() as Array<{ name: string }>;
-  if (!connCols.some((c) => c.name === "wp_version")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN wp_version TEXT;`);
-  }
-  if (!connCols.some((c) => c.name === "theme_name")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN theme_name TEXT;`);
-  }
-  if (!connCols.some((c) => c.name === "plugin_count")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN plugin_count INTEGER;`);
-  }
-  if (!connCols.some((c) => c.name === "health_score")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_score INTEGER;`);
-  }
-  if (!connCols.some((c) => c.name === "health_reported_at")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_reported_at TEXT;`);
-  }
-  if (!connCols.some((c) => c.name === "health_secret")) {
-    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_secret TEXT;`);
-  }
   // AC-1 (issue #24): wp_settings — single-row table for WP connection creds.
   // id is always 1 (enforced by the helpers). Password stored as plaintext
   // (NG-1: single-operator tool on a Docker volume; encryption deferred).
@@ -121,6 +102,28 @@ function db(): Database.Database {
       created_at TEXT NOT NULL
     );
   `);
+  // AC-1 (issue #62): guarded ALTERs for health-reporting columns on
+  // wp_connections. MUST run AFTER CREATE TABLE wp_connections above.
+  // Fix #85: previously these ran before the table existed → fresh-DB crash.
+  const connCols = conn.prepare(`PRAGMA table_info(wp_connections)`).all() as Array<{ name: string }>;
+  if (!connCols.some((c) => c.name === "wp_version")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN wp_version TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "theme_name")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN theme_name TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "plugin_count")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN plugin_count INTEGER;`);
+  }
+  if (!connCols.some((c) => c.name === "health_score")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_score INTEGER;`);
+  }
+  if (!connCols.some((c) => c.name === "health_reported_at")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_reported_at TEXT;`);
+  }
+  if (!connCols.some((c) => c.name === "health_secret")) {
+    conn.exec(`ALTER TABLE wp_connections ADD COLUMN health_secret TEXT;`);
+  }
   // AC-1 (issue #34): wp_pairing_codes — one-time codes for plugin auto-connect.
   conn.exec(`
     CREATE TABLE IF NOT EXISTS wp_pairing_codes (
@@ -163,6 +166,13 @@ function db(): Database.Database {
   // AC-1 (issue #81): SMTP config columns.
   const smtpCols = ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from", "notify_operator_email"];
   for (const col of smtpCols) {
+    if (!appCols.some((c) => c.name === col)) {
+      conn.exec(`ALTER TABLE app_settings ADD COLUMN ${col} TEXT NOT NULL DEFAULT '';`);
+    }
+  }
+  // AC-2 (issue #88): Plesk integration config columns.
+  const pleskCols = ["plesk_url", "plesk_user", "plesk_password"];
+  for (const col of pleskCols) {
     if (!appCols.some((c) => c.name === col)) {
       conn.exec(`ALTER TABLE app_settings ADD COLUMN ${col} TEXT NOT NULL DEFAULT '';`);
     }
@@ -642,6 +652,9 @@ export interface AppSettingsRow {
   smtp_pass: string;
   smtp_from: string;
   notify_operator_email: string;
+  plesk_url: string;
+  plesk_user: string;
+  plesk_password: string;
   updated_at: string;
 }
 
@@ -1285,3 +1298,37 @@ export function getActivityStats(): {
   };
 }
 
+
+// --- Plesk integration (issue #88) ---
+
+/** Get Plesk connection config (or null if not configured). */
+export function getPleskConfig(): { pleskUrl: string; pleskUser: string; pleskPassword: string } | null {
+  const s = getAppSettings();
+  if (!s || !s.plesk_url || !s.plesk_user || !s.plesk_password) return null;
+  return {
+    pleskUrl: s.plesk_url,
+    pleskUser: s.plesk_user,
+    pleskPassword: s.plesk_password,
+  };
+}
+
+/** Save Plesk connection config. */
+export function savePleskSettings(input: {
+  pleskUrl?: string;
+  pleskUser?: string;
+  pleskPassword?: string;
+}): void {
+  const current = getAppSettings();
+  const values = {
+    plesk_url: input.pleskUrl ?? current?.plesk_url ?? "",
+    plesk_user: input.pleskUser ?? current?.plesk_user ?? "",
+  };
+  if (input.pleskPassword && input.pleskPassword.length > 0) {
+    (values as Record<string, string>).plesk_password = input.pleskPassword;
+  } else {
+    (values as Record<string, string>).plesk_password = current?.plesk_password ?? "";
+  }
+  db().prepare(
+    `UPDATE app_settings SET plesk_url = @plesk_url, plesk_user = @plesk_user, plesk_password = @plesk_password, updated_at = @updated_at WHERE id = 1`,
+  ).run({ ...values, updated_at: new Date().toISOString() });
+}
