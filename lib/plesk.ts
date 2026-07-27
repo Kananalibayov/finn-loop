@@ -1,6 +1,15 @@
 // Plesk REST API v2 client.
 // Communicates with Plesk Obsidian's /api/v2/ endpoints to auto-provision
 // WordPress sites for clients during onboarding.
+//
+// NOTE: Plesk servers often use self-signed certificates. Node's fetch rejects
+// these by default. We use a custom https agent (rejectUnauthorized: false) to
+// work around this — acceptable for a server-to-server call to a known host.
+
+import { Agent } from "node:https";
+
+// Reuse a single agent instance.
+const httpsAgent = new Agent({ rejectUnauthorized: false });
 
 export interface PleskConfig {
   pleskUrl: string; // e.g. https://silly-darwin.66-179-240-64.plesk.page:8443
@@ -52,6 +61,8 @@ async function pleskFetch(
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
+      // @ts-expect-error — Node's fetch supports `dispatcher`/`agent` but types vary.
+      agent: httpsAgent,
     });
   } finally {
     clearTimeout(timer);
