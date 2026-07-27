@@ -1,6 +1,6 @@
 // AC-7 (issue #68): client login. PUBLIC (not behind middleware).
 import { NextRequest, NextResponse } from "next/server";
-import { getClientByEmail } from "@/lib/db";
+import { getClientByEmail, logActivity } from "@/lib/db";
 import { verifyPasswordAgainstHash, createClientSessionCookie } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -30,5 +30,10 @@ export async function POST(req: NextRequest) {
   }
 
   const cookie = await createClientSessionCookie(client.id);
+  logActivity({
+    eventType: "client_login",
+    description: `Client "${client.name}" logged in to the portal`,
+    clientId: client.id,
+  });
   return NextResponse.json({ redirect: "/portal" }, { status: 200, headers: { "Set-Cookie": cookie } });
 }

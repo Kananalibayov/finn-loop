@@ -223,6 +223,20 @@ function db(): Database.Database {
       resolved_at TEXT
     );
   `);
+  // AC-1 (issue #80): activity_log — tracks key platform events for analytics.
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      description TEXT NOT NULL,
+      operator_id INTEGER,
+      client_id INTEGER,
+      project_id INTEGER,
+      connection_id INTEGER,
+      meta TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
   // AC-2 (issue #68): guarded ALTER — link sites to a client (nullable).
   const sitesCols = conn.prepare(`PRAGMA table_info(sites)`).all() as Array<{ name: string }>;
   if (!sitesCols.some((c) => c.name === "client_id")) {
@@ -1137,5 +1151,91 @@ export function resolveChangeRequest(
     )
     .run(status, operatorNotes, now, id);
   return getChangeRequestById(id);
+}
+
+// --- Activity log (issue #80: analytics) ---
+
+export interface ActivityLogRow {
+  id: number;
+  event_type: string;
+  description: string;
+  operator_id: number | null;
+  client_id: number | null;
+  project_id: number | null;
+  connection_id: number | null;
+  meta: string | null;
+  created_at: string;
+}
+
+/** Log an activity event. Lightweight — never throws (analytics is best-effort). */
+export function logActivity(input: {
+  eventType: string;
+  description: string;
+  operatorId?: number | null;
+  clientId?: number | null;
+  projectId?: number | null;
+  connectionId?: number | null;
+  meta?: Record<string, unknown> | null;
+}): void {
+  try {
+    db()
+      .prepare(
+        `INSERT INTO activity_log (event_type, description, operator_id, client_id, project_id, connection_id, meta, created_at)
+         VALUES (@eventType, @description, @operatorId, @clientId, @projectId, @connectionId, @meta, @createdAt)`,
+      )
+      .run({
+        eventType: input.eventType,
+        description: input.description,
+        operatorId: input.operatorId ?? null,
+        clientId: input.clientId ?? null,
+        projectId: input.projectId ?? null,
+        connectionId: input.connectionId ?? null,
+        meta: input.meta ? JSON.stringify(input.meta) : null,
+        createdAt: new Date().toISOString(),
+      });
+  } catch {
+    // Non-fatal — analytics should never break the main flow.
+  }
+}
+
+/** Recent activity feed (for the dashboard). */
+export function listRecentActivity(limit: number = 20): ActivityLogRow[] {
+  return db()
+    .prepare(`SELECT * FROM activity_log ORDER BY id DESC LIMIT ?`)
+    .all(limit) as ActivityLogRow[];
+}
+
+/** Stats summary (for the dashboard analytics cards). */
+export function getActivityStats(): {
+  totalGenerations: number;
+  totalPushes: number;
+  totalDeliveries: number;
+  totalChangeRequests: number;
+  totalClientLogins: number;
+  last7Days: Array<{ date: string; count: number }>;
+} {
+  const conn = db();
+  const count = (eventType: string) =>
+    (conn.prepare(`SELECT COUNT(*) as n FROM activity_log WHERE event_type = ?`).get(eventType) as { n: number }).n;
+
+  // Last 7 days activity breakdown.
+  const rows = conn
+    .prepare(
+      `SELECT DATE(created_at) as date, COUNT(*) as count
+       FROM activity_log
+       WHERE created_at > datetime('now', '-7 days')
+       GROUP BY DATE(created_at)
+       ORDER BY date DESC`,
+    )
+    .all() as Array<{ date: string; count: number }>;
+
+  return {
+    totalGenerations: count("generate"),
+    totalPushes: count("push_wp"),
+    totalDeliveries: count("deliver_template"),
+    totalChangeRequests: count("change_request"),
+    totalClientLogins: count("client_login"),
+    last7Days: rows,
+  };
 }
 
