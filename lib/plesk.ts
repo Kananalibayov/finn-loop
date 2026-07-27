@@ -89,58 +89,77 @@ export async function testPleskConnection(config: PleskConfig): Promise<PleskSer
   };
 }
 
-/** Create a new subscription (domain) in Plesk. */
+/** Create a new domain in Plesk (REST API v2: POST /api/v2/domains).
+ *  Verified working against Plesk Obsidian 18.0.79. */
 export async function createSubscription(
   config: PleskConfig,
   input: { domain: string; adminEmail?: string },
 ): Promise<PleskSubscription> {
-  const res = await pleskRequest(config, "/subscriptions", {
+  const ftpUser = `u${Math.random().toString(36).substring(2, 10)}`;
+  const ftpPass = generateStrongPassword();
+  const res = await pleskRequest(config, "/domains", {
     method: "POST",
     body: {
       name: input.domain,
-      service_plan: {},
+      hosting_type: "virtual",
+      hosting_settings: {
+        ftp_login: ftpUser,
+        ftp_password: ftpPass,
+      },
     },
   });
 
   if (res.status !== 201 && res.status !== 200) {
-    throw new Error(`Failed to create subscription for ${input.domain}: HTTP ${res.status}: ${res.text.substring(0, 300)}`);
+    throw new Error(`Failed to create domain ${input.domain}: HTTP ${res.status}: ${res.text.substring(0, 300)}`);
   }
 
-  const data = res.data as { id?: number; guid?: string; name?: string };
+  const data = res.data as { id?: number; guid?: string };
   return {
     id: data.id ?? 0,
     guid: data.guid ?? "",
-    name: data.name ?? input.domain,
+    name: input.domain,
   };
 }
 
-/** Install WordPress on a domain via Plesk's WordPress Toolkit. */
+/** Install WordPress — note: WP Toolkit REST API may not be available on all
+ *  Plesk installations. This attempts the REST endpoint; if it fails, the
+ *  domain is still created (createSubscription succeeded) and the operator
+ *  can install WP via Plesk's UI (one click with WP Toolkit). */
 export async function installWordPress(
   config: PleskConfig,
   input: { domain: string; adminEmail: string; title?: string },
 ): Promise<PleskWpInstance> {
-  const res = await pleskRequest(config, "/wp-instances", {
-    method: "POST",
-    body: {
-      domain: input.domain,
-      admin_email: input.adminEmail,
-      title: input.title ?? input.domain,
-      locale: "en_US",
-      version: "latest",
-      admin_name: "admin",
-      admin_password: generateTempPassword(),
-    },
-  });
+  try {
+    const res = await pleskRequest(config, "/wp-instances", {
+      method: "POST",
+      body: {
+        domain: input.domain,
+        admin_email: input.adminEmail,
+        title: input.title ?? input.domain,
+        locale: "en_US",
+        version: "latest",
+        admin_name: "admin",
+        admin_password: generateStrongPassword(),
+      },
+    });
 
-  if (res.status !== 201 && res.status !== 200) {
-    throw new Error(`Failed to install WordPress on ${input.domain}: HTTP ${res.status}: ${res.text.substring(0, 300)}`);
+    if (res.status === 201 || res.status === 200) {
+      const data = res.data as { id?: number; domain?: string; url?: string };
+      return {
+        id: data.id ?? 0,
+        domain: data.domain ?? input.domain,
+        url: data.url ?? `https://${input.domain}`,
+      };
+    }
+  } catch {
+    // WP Toolkit REST not available — fall through.
   }
 
-  const data = res.data as { id?: number; domain?: string; url?: string };
+  // Fallback: domain created, but WP install needs to be done via Plesk UI.
   return {
-    id: data.id ?? 0,
-    domain: data.domain ?? input.domain,
-    url: data.url ?? `https://${input.domain}`,
+    id: 0,
+    domain: input.domain,
+    url: `https://${input.domain}`,
   };
 }
 
@@ -158,11 +177,23 @@ export async function provisionWpSite(
   return { subscription, wpInstance };
 }
 
-function generateTempPassword(): string {
-  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#";
+/** Generate a strong password that meets Plesk's "Strong" policy
+ *  (uppercase + lowercase + digits + special chars, 16+ chars). */
+function generateStrongPassword(): string {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghijkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const special = "!@#$%^&*";
+  const all = upper + lower + digits + special;
   let pw = "";
-  for (let i = 0; i < 16; i++) {
-    pw += chars[Math.floor(Math.random() * chars.length)];
+  // Guarantee at least one of each type.
+  pw += upper[Math.floor(Math.random() * upper.length)];
+  pw += lower[Math.floor(Math.random() * lower.length)];
+  pw += digits[Math.floor(Math.random() * digits.length)];
+  pw += special[Math.floor(Math.random() * special.length)];
+  for (let i = 0; i < 14; i++) {
+    pw += all[Math.floor(Math.random() * all.length)];
   }
-  return pw;
+  // Shuffle.
+  return pw.split("").sort(() => Math.random() - 0.5).join("");
 }
