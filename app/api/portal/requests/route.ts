@@ -1,7 +1,7 @@
 // Client: submit + list their change requests.
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, verifySessionRole } from "@/lib/auth";
-import { createChangeRequest, listChangeRequestsForClient } from "@/lib/db";
+import { createChangeRequest, listChangeRequestsForClient, logActivity } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +41,12 @@ export async function POST(req: NextRequest) {
     clientId: session.clientId,
     projectId: body.projectId as number,
     instruction,
+  });
+  logActivity({
+    eventType: "change_request",
+    description: `Client submitted change request: "${instruction.substring(0, 80)}"`,
+    clientId: session.clientId,
+    projectId: body.projectId as number,
   });
   const { client_id: _cid, ...safe } = row;
   return NextResponse.json(safe, { status: 201 });

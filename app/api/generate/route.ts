@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTheme } from "@/lib/themes";
 import { GenerateRequest, GenerateResponse } from "@/lib/types";
-import { insertProject } from "@/lib/db";
+import { insertProject, logActivity } from "@/lib/db";
 import { generatePages } from "@/lib/generate";
 
 export const runtime = "nodejs";
@@ -66,6 +66,11 @@ export async function POST(req: NextRequest) {
         mode,
         inputJson: JSON.stringify(input),
         pagesJson: JSON.stringify(pages),
+      });
+      logActivity({
+        eventType: "generate",
+        description: `Generated ${pages.length}-page site for "${input.businessName}"`,
+        projectId: response.id,
       });
     } catch (persistErr) {
       console.error("[generate] DB save failed:", (persistErr as Error).message);

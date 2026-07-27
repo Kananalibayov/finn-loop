@@ -166,6 +166,9 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      {/* Analytics + recent activity (issue #80) */}
+      <AnalyticsSection />
     </main>
   );
 }
@@ -192,4 +195,68 @@ function formatDate(iso: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+/** Analytics section (issue #80): stats cards + recent activity feed. */
+function AnalyticsSection() {
+  const [data, setData] = useState<{
+    stats: {
+      totalGenerations: number;
+      totalPushes: number;
+      totalDeliveries: number;
+      totalChangeRequests: number;
+      totalClientLogins: number;
+    };
+    recent: Array<{ id: number; event_type: string; description: string; created_at: string }>;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/activity", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setData(d); })
+      .catch(() => {});
+  }, []);
+
+  if (!data) return null;
+
+  const eventIcon: Record<string, string> = {
+    generate: "✨",
+    push_wp: "📤",
+    deliver_template: "📦",
+    change_request: "📝",
+    client_login: "🔑",
+  };
+
+  return (
+    <>
+      <section style={{ marginTop: 16 }}>
+        <h2 style={{ margin: "0 0 12px" }}>Activity</h2>
+        <div className="stat-grid">
+          <StatCard icon="✨" label="Generations" value={data.stats.totalGenerations} />
+          <StatCard icon="📤" label="WP pushes" value={data.stats.totalPushes} />
+          <StatCard icon="📦" label="Deliveries" value={data.stats.totalDeliveries} />
+          <StatCard icon="📝" label="Change requests" value={data.stats.totalChangeRequests} />
+        </div>
+      </section>
+
+      {data.recent.length > 0 && (
+        <section className="card" style={{ marginTop: 16 }}>
+          <h2>Recent activity</h2>
+          <ul className="site-list">
+            {data.recent.slice(0, 10).map((a) => (
+              <li key={a.id} className="site-row" style={{ padding: "8px 0" }}>
+                <span style={{ fontSize: 18, marginRight: 8 }}>{eventIcon[a.event_type] ?? "•"}</span>
+                <div className="site-row-main">
+                  <span className="site-row-meta">{a.description}</span>
+                </div>
+                <span className="hint" style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                  {new Date(a.created_at).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
+  );
 }

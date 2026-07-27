@@ -2,7 +2,7 @@
 // First push creates 5 pages; re-push updates them by stored WP page ID.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getProject, updateProjectWpPageIds, getWpSettings, getWpConnection } from "@/lib/db";
+import { getProject, updateProjectWpPageIds, getWpSettings, getWpConnection, logActivity } from "@/lib/db";
 import { WpClient } from "@/lib/wp";
 import type { GeneratedPage, PageKey } from "@/lib/types";
 
@@ -155,6 +155,13 @@ export async function POST(
 
     // Persist the WP page IDs for future re-pushes.
     updateProjectWpPageIds(num, results);
+
+    logActivity({
+      eventType: "push_wp",
+      description: `Pushed ${pages.length} pages to WordPress for "${project.business_name}"`,
+      projectId: num,
+      connectionId: project.wp_connection_id ?? undefined,
+    });
 
     return NextResponse.json(
       { pushed: pages.length, pageIds: results },
