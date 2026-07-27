@@ -50,7 +50,10 @@ const GROUPS: NavGroup[] = [
   },
   {
     label: "Configure",
-    items: [{ href: "/settings", label: "Settings", icon: "⚙️" }],
+    items: [
+      { href: "/clients", label: "Clients", icon: "👥" },
+      { href: "/settings", label: "Settings", icon: "⚙️" },
+    ],
   },
 ];
 
