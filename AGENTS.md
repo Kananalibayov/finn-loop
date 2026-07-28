@@ -4,6 +4,36 @@ This project runs the **Finn-loop** — a 3-skill AI software factory adapted fr
 [Alex Finn's loop](https://youtu.be/FRGLToHAtgc) (repo: [finna/Finn-loop](https://github.com/finna/Finn-loop)),
 running on **ZCode** with **GitHub Issues** instead of Linear.
 
+## ⚠️ Read the product north star first
+
+This file describes **how we build**. It does not describe **what we are building**.
+
+Before specifying or implementing anything, read — in this order:
+
+1. **[`docs/NORTH-STAR.md`](./docs/NORTH-STAR.md)** — what the product is, the Golden
+   Path every feature must serve, the invariants, and the quality bar. **Authoritative.**
+   If a request conflicts with an invariant there, say so before building and name it.
+2. **[`docs/AGENT-TIERS.md`](./docs/AGENT-TIERS.md)** — **which model may do which work.**
+   If you are a GLM-class builder, this file governs you: you work only from a Build Card,
+   and an uncarded issue is a stop condition.
+3. **[`docs/GAP-LEDGER.md`](./docs/GAP-LEDGER.md)** — 162 verified defects and the seven
+   root causes. Read the **sequencing landmine** section before touching `client_id`.
+4. **[`docs/STATE-OF-THE-BUILD.md`](./docs/STATE-OF-THE-BUILD.md)** — where the code
+   honestly is, including what is broken while appearing to work.
+5. **[`docs/PRODUCT-VISION.md`](./docs/PRODUCT-VISION.md)** — the defensible position and
+   the enterprise/compliance requirements that gate publishing.
+6. **[`ROADMAP.md`](./ROADMAP.md)** — the ordered phases. Do not start a phase before the
+   one above it is done.
+
+Every issue and PR must state **which Golden Path step it serves**. Work that serves no
+step, and was not explicitly requested, is out of scope.
+
+**The two rules that override convenience:**
+- **Never report success for work that did not happen.** Seven shipped features currently
+  violate this. It is Invariant 4 and the root cause of the largest defect class in the repo.
+- **Never claim a check you did not run.** Evidence means literal command output with exit
+  codes, or the word `NOT RUN`.
+
 ## The three skills
 
 | Skill | Role | When it runs |
