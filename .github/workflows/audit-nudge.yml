@@ -1,0 +1,107 @@
+name: audit-nudge
+
+# Reminds the human to run `/finn-audit` once enough work has accumulated since the last
+# checkpoint. Never runs the audit itself - that's a judgment-heavy pass reserved for
+# Kimi/Opus, not something to fire unattended on a schedule.
+#
+# Idempotent by design: searches for the existing open "audit due" issue first and updates
+# it, rather than creating a new one on every run. Counts off the GitHub API (merged PR
+# list), not git log, because a squash-merged PR is one commit regardless of how much
+# it changed - the PR list is what tells you actual scope.
+
+on:
+  schedule:
+    - cron: "0 14 * * *" # once a day; cheap, not urgent
+  workflow_dispatch: {} # manual trigger, e.g. right after a big merge
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: audit-nudge
+  cancel-in-progress: false
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Count merges since last audit and update the nudge issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # ---- Find the last audit's date from docs/AUDIT-LOG.md -----------------
+          # The marker is the file the audit itself appends to (see finn-audit
+          # SKILL.md #1) - not a tag, for the same reasons a tag is unsafe there.
+          if [ ! -f docs/AUDIT-LOG.md ]; then
+            echo "docs/AUDIT-LOG.md does not exist yet - nothing to count against. Skipping."
+            exit 0
+          fi
+
+          last_date=$(grep -oE '^## Audit [0-9]+ — [0-9]{4}-[0-9]{2}-[0-9]{2}' docs/AUDIT-LOG.md \
+            | tail -1 | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+
+          if [ -z "$last_date" ]; then
+            echo "Could not parse a date from docs/AUDIT-LOG.md. Not nudging blind - fix the log format."
+            exit 0
+          fi
+          echo "Last audit dated: $last_date"
+
+          # ---- Count merged PRs since then ---------------------------------------
+          count=$(gh pr list --repo "$REPO" --state merged --base main \
+            --search "merged:>=${last_date}" --json number --jq 'length')
+          echo "Merged PRs since last audit: $count"
+
+          THRESHOLD=5
+
+          # ---- Find the existing nudge issue, if any -----------------------------
+          existing=$(gh issue list --repo "$REPO" --state open \
+            --search "in:title \"Audit due\"" --json number --jq '.[0].number // ""')
+
+          if [ "$count" -lt "$THRESHOLD" ]; then
+            echo "$count < $THRESHOLD merges - not due yet."
+            if [ -n "$existing" ]; then
+              # Work dropped back below threshold somehow (e.g. an audit ran outside
+              # this workflow's knowledge) - close the stale nudge rather than leave
+              # a misleading open issue sitting around.
+              gh issue close "$existing" --repo "$REPO" \
+                --comment "Merge count since last audit is back below threshold ($count < $THRESHOLD). Closing this nudge." || true
+            fi
+            exit 0
+          fi
+
+          prlist=$(gh pr list --repo "$REPO" --state merged --base main \
+            --search "merged:>=${last_date}" --json number,title \
+            --jq '.[] | "- #\(.number) \(.title)"')
+
+          body="**${count} PRs have merged to \`main\` since the last checkpoint** (${last_date}), at or above the threshold of ${THRESHOLD}.
+
+          This does not run itself — the checkpoint audit needs a judgment call from Kimi or Opus (\`/finn-audit\`), not an unattended cron.
+
+          ## To run it
+
+          Tell Kimi or Opus: \`kimi, audit\` (or run \`/finn-audit\` directly).
+
+          ## PRs merged since ${last_date}
+
+          ${prlist}
+
+          ---
+          This issue is maintained by \`audit-nudge\` — it will update this same issue rather than opening a new one, and will close it automatically once the count drops back below ${THRESHOLD} (normally because an audit ran and moved the checkpoint)."
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$REPO" --body "$body" >/dev/null
+            echo "Updated existing nudge issue #$existing"
+          else
+            gh issue create --repo "$REPO" \
+              --title "Audit due — ${count} PRs merged since ${last_date}" \
+              --label "finn-spec" \
+              --body "$body" >/dev/null
+            echo "Opened a new nudge issue"
+          fi
