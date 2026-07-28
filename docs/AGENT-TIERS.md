@@ -11,7 +11,7 @@
 
 ## 1. Why this exists
 
-The existing `finn-build` skill requires independent judgment at five points: deciding
+The original `finn-build` skill (since deleted) required independent judgment at five points: deciding
 whether an acceptance criterion is ambiguous, matching "the repository's existing style,
 architecture, and naming", deciding when tests are warranted, choosing the "narrowest
 useful" checks, and writing per-`AC-N` evidence lines.
@@ -171,7 +171,7 @@ rather than merely slowing things down.
 | **`data/app.db`** | `better-sqlite3` is a synchronous in-process binding on a single cached connection, with **no WAL and no `busy_timeout`** (see [`GAP-LEDGER.md`](./GAP-LEDGER.md) pattern 3). Default rollback-journal mode means writers block readers | A second process touching the file gets `SQLITE_BUSY` with no retry, or tears the file mid-write |
 | **The dev server on :3000** | One port, one process | The second agent silently tests the first agent's build |
 | **A single working tree** | Two builders editing one checkout | Each sees the other's half-finished edits; `git status` preflight fails or, worse, one commits the other's work |
-| **The `finn-build` cron loop** | The cooperative lock is `gh issue edit --add-assignee`, which is per-GitHub-account | Only **one builder loop per repository**, as `finn-build/SKILL.md` states |
+| **The builder claim lock** | The cooperative lock is `gh issue edit --add-assignee`, which is per-GitHub-account, not per-tier | Two builder loops can race for the same issue. Mitigated because `finn-t1` and `finn-t2` filter on *different* `tier:` labels, so their queues are disjoint by construction |
 
 **The safe parallel setup** — give each code-writing agent its own checkout:
 
@@ -637,29 +637,54 @@ files a weak model would otherwise wander into.
 
 ## 10. Mapping onto the existing loop
 
-| Skill | Tier | Status |
+| Skill | Slot | Status |
 |---|---|---|
-| `finn-spec` | **T3 only** | Must emit a Build Card for `[T1]` issues, stamp the tier in the title, and refuse to file without all nine sections |
-| **`finn-t1`** | **T1** | ✅ **Written** — `.zcode/skills/finn-t1/SKILL.md`. Refuses uncarded issues, verifies the anchor before editing, forbids exploration, captures exit codes, five-heading PR body |
-| `finn-build` | T2 | Unchanged for T2. **Do not run it on a GLM-class model** — use `finn-t1` |
-| `finn-review` | **T3 only** | Evidence gate first, then scope, then invariants, then correctness. Blocks on only the four grounds above |
+| `finn-spec` | T3-S | Interactive spec interview, human present. Must emit a Build Card for `[T1]` issues and stamp the tier label |
+| **`finn-t1`** | T1 | Refuses uncarded issues, checks `## Depends on` and that verify commands exist, verifies the anchor before editing, forbids exploration, captures exit codes |
+| **`finn-t2`** | T2 | Bounded module work inside a named file set. May not change schema, sessions, or secrets |
+| **`finn-t3`** | T3-A / T3-S / T3-R | Review, unblock, build `tier:t3`, refill the backlog from `ROADMAP.md` |
+
+`finn-build` and `finn-review` were **deleted** — they duplicated `finn-t2` and `finn-t3`
+step (a), and `finn-build` was the last place an LLM ran `gh pr merge`. Two reviewers with two
+definitions of a verdict is dangerous now that `loop-approved` feeds a merge gate.
 
 **Which skill to run:**
 
 ```
 T1 slot  (GLM 5.2)                  →  /finn-t1   (carded [T1] issues only)
-T2 slot  (Sonnet 5, mid-tier)       →  /finn-build      ([T2] issues)
-T3 slots (your strongest models)    →  /finn-spec, /finn-review, T3 implementation
+T2 slot  (Sonnet 5, mid-tier)       →  /finn-t2         ([T2] issues)
+T3 slots (your strongest models)    →  /finn-t3         (review, unblock, build, refill)
+                                    →  /finn-spec       (interactive, you present)
 ```
 
 **Stamp the tier in the issue title** — `[T1]`, `[T2]`, `[T3]`. `finn-t1` picks only
-`[T1]`; `finn-build` picks only `[T2]`. An unstamped issue is not pickable by any builder,
+`[T1]`; `finn-t2` picks only `[T2]`. An unstamped issue is not pickable by any builder,
 which is the safe default.
 
-**Unresolved contradiction, flagged for the owner:** `AGENTS.md:35` and `:134` forbid
-agents from merging; `AGENTS.md:62-83` and `finn-build` §0a authorise auto-merge. Until
-that is settled, **T1 and T2 must never merge.** If auto-merge stays, it belongs to T3
-only, gated on a T3 review.
+### Merge authority — resolved
+
+This document previously flagged a live contradiction: `AGENTS.md` forbade agents from
+merging in two places and authorised auto-merge in a third, while `finn-build` §0a actually
+ran `gh pr merge` from the builder LLM.
+
+**Resolution: no LLM merges — GitHub does.** `.github/workflows/finn-gate.yml` is a required
+status check that passes only when `loop-approved` is present, `needs-human-review` is absent,
+the reviewed SHA equals the current head, the diff trips no protected-path or
+dangerous-content rule, and the linked issue is not `tier:t3`. When it passes it enables
+GitHub's *native* auto-merge; GitHub performs the merge. `finn-build` was deleted.
+
+Two properties worth understanding:
+
+- **The stale-review race closes itself.** GitHub does not strip labels when new commits land,
+  so `loop-approved` alone is not proof. Pushing any commit re-runs the gate, the reviewed SHA
+  stops matching head, the check goes red, and GitHub withholds the merge.
+- **The diff-based scan is primary; the tier label is redundancy.** `tier:tN` is LLM-assigned
+  at spec time, so a mis-tiered auth issue is exactly the failure the blast-radius rule exists
+  for. A `tier:t1` PR that touches `lib/auth.ts` is still blocked. `.github/CODEOWNERS`
+  additionally requires owner review on those paths — a GitHub-native backstop that survives a
+  bug in our own workflow.
+
+Kill switch: repo variable `FINN_AUTOMERGE`. Anything but `on` is dry-run.
 
 ---
 

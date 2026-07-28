@@ -12,9 +12,9 @@ ZCode is open. You click merge at night.
 ```
 You (idea) → /finn-spec → GitHub Issue → you label it agent-ready
                                                 ↓
-finn-build picks it up → codes it → opens PR → finn-review tests → verdict
+/finn-t1 or /finn-t2 builds it → opens PR → /finn-t3 reviews → verdict
                                                 ↓
-                                loop-approved ✅ → you merge
+                    loop-approved → finn-gate → GitHub auto-merges
 ```
 
 ---
@@ -24,24 +24,40 @@ finn-build picks it up → codes it → opens PR → finn-review tests → verdi
 ```
 ZCodeProject/
 ├── README.md                          ← you are here
-├── AGENTS.md                          ← the rules the AI follows
+├── AGENTS.md                          ← the rules every model follows
+├── ROADMAP.md                         ← the ordered phases
+├── docs/
+│   ├── NORTH-STAR.md                  ← what we're building; the invariants
+│   ├── PIPELINE.md                    ← how work flows; the standing commands
+│   ├── AGENT-TIERS.md                 ← which model does which work
+│   ├── GAP-LEDGER.md                  ← 162 verified defects, 7 root causes
+│   ├── STATE-OF-THE-BUILD.md          ← where the code honestly is
+│   └── PRODUCT-VISION.md              ← positioning + compliance gates
 └── .zcode/
     └── skills/
-        ├── finn-spec/SKILL.md         ← the interviewer
-        ├── finn-build/SKILL.md        ← the builder
-        └── finn-review/SKILL.md       ← the reviewer
+        ├── finn-spec/SKILL.md         ← the interviewer (you must be present)
+        ├── finn-t1/SKILL.md           ← executor: runs a Build Card exactly
+        ├── finn-t2/SKILL.md           ← implementer: bounded module work
+        └── finn-t3/SKILL.md           ← architect + reviewer + backlog refill
 ```
 
 ---
 
-## Setup status (already done)
+## Setup status
 
 - ✅ GitHub CLI (`gh`) installed at `C:\Program Files\GitHub CLI\gh.exe`
 - ✅ Logged in as `Kananalibayov`
 - ✅ Repo created: `Kananalibayov/finn-loop` (private)
-- ✅ All 7 labels created
-- ✅ Cron automation "Finn-loop builder (every 5 min)" registered
-- ⬜ Cron automation "Finn-loop reviewer (every 5 min)" — see below
+- ✅ Labels created, including `tier:t1` / `tier:t2` / `tier:t3`
+- ✅ `.github/workflows/finn-gate.yml` — the mechanical merge gate
+- ✅ `.github/CODEOWNERS` — owner review required on protected paths
+- ⬜ Three ZCode cron automations (one per tier, each in its own worktree) — see
+      [`docs/PIPELINE.md`](./docs/PIPELINE.md) §6
+- ⬜ Branch protection: require `build` **and** `finn-gate`; enable "Allow auto-merge";
+      enable "Require review from Code Owners"
+- ⬜ Repo variable `FINN_AUTOMERGE` — leave unset (dry run) until the gate is trusted
+
+There is **no reviewer automation to register.** Review is dispatch step (a) of `/finn-t3`.
 
 ---
 
@@ -63,24 +79,31 @@ beyond built-in ZCode for now.
 
 ---
 
-## How to register the reviewer cron
+## How to register the three tier automations
 
-The builder cron is already registered in this session. ZCode does not allow a
-scheduled task to create another scheduled task from within itself, so register
-the reviewer cron yourself:
+ZCode does not allow a scheduled task to create another scheduled task, so register these
+yourself. **Each needs its own git worktree** — three crons against one checkout collide on
+the working tree and on `data/app.db` (see [`docs/AGENT-TIERS.md`](./docs/AGENT-TIERS.md),
+"Running several agents at once").
 
-1. **Open a NEW ZCode session** (not this one).
-2. Type (or say):
-   > Schedule an automation titled "Finn-loop reviewer (every 5 min)" that runs
-   > every 5 minutes. Prompt: "Run the /finn-review skill now. Work from the
-   > repo at C:\Users\newke\ZCodeProject. Review exactly one PR that needs
-   > review, post the three-group verdict comment, and set labels. Never merge,
-   > never push, never use a formal GitHub review. Report briefly what you did
-   > or if nothing needed review."
-3. ZCode will create the automation and confirm.
+```bash
+git worktree add ../finn-t1 -b wt/t1
+git worktree add ../finn-t2 -b wt/t2
+git worktree add ../finn-t3 -b wt/t3
+```
 
-To list or delete automations, in any session say *"list my automations"* or
-*"delete the Finn-loop builder automation"*.
+Then, in a ZCode session, register one automation per tier — for example:
+
+> Schedule an automation titled "Finn-loop T3 (every 5 min)" that runs every 5 minutes.
+> Prompt: "Run the /finn-t3 skill now. Work from the repo at C:\Users\newke\finn-t3.
+> Do exactly one unit of work per the skill's dispatch order, then stop. Never merge,
+> never apply agent-ready. Report briefly what you did, or that the queue was empty."
+
+Repeat for `/finn-t1` (dir `..\finn-t1`) and `/finn-t2` (dir `..\finn-t2`).
+
+**Only the T3 automation may run the dev server or touch `data/app.db`.**
+
+To list or delete automations, say *"list my automations"* in any session.
 
 ---
 
@@ -104,23 +127,29 @@ gh issue edit <NUMBER> --add-label agent-ready
 ```
 *(Adding `agent-ready` is the human approval gate. The AI never adds it itself.)*
 
-### All day (AI, while ZCode is open): The cron loops run
-- The builder cron claims `agent-ready` issues and opens PRs.
-- The reviewer cron reviews PRs and labels them `loop-approved` or
-  `loop-changes-requested`.
+### All day (while ZCode is open): the three tier crons run
+- `/finn-t1` and `/finn-t2` claim `agent-ready` issues at their tier and open PRs.
+- `/finn-t3` reviews PRs it didn't author, unblocks issues, builds `tier:t3` work, and
+  refills the spec backlog from `ROADMAP.md` when fewer than 3 issues are `agent-ready`.
 
-You can watch it work in your repo:
+You can watch it work:
 ```bash
-gh issue list                       # see the queue
-gh pr list                          # see open PRs
-gh pr list --label loop-approved    # see what's ready to merge
+gh issue list                          # the queue
+gh pr list                             # open PRs
+gh pr list --label would-auto-merge    # what the gate WOULD merge (dry run)
+gh pr checks <PR> --required           # build + finn-gate status
 ```
 
-### Night (~5 min): Merge
-Merge anything labeled `loop-approved` that you're happy with:
+### Night (~2 min): check what merged itself
+Once `FINN_AUTOMERGE=on`, PRs that clear `finn-gate` are merged by GitHub without you. Your
+job shrinks to three things:
 ```bash
-gh pr merge <PR-NUMBER> --squash --delete-branch
+gh pr list --label needs-human-review  # escalations only you can settle
+gh issue list --label blocked          # questions a builder is waiting on
+gh issue list --label finn-spec        # read new specs, label the good ones agent-ready
 ```
+Anything the gate refuses — `tier:t3`, protected paths, dangerous content — you merge by
+hand, deliberately.
 
 ---
 
@@ -135,41 +164,54 @@ Turns your vague idea into a bulletproof spec.
   (non-goals)
 - **Never** adds `agent-ready` itself — that's your job
 
-### `/finn-build` — The Builder (runs on cron)
-Each run does **exactly one unit of work**:
-1. **Preflight**: confirms clean working tree (never stashes/resets your work)
-2. First checks for PRs with `loop-changes-requested` and fixes them
-3. Otherwise claims the oldest `agent-ready` + unassigned + not-blocked issue
-4. Creates a branch `NN-short-name`
-5. Implements ONLY the acceptance criteria (non-goals are binding)
-6. Runs lint/test/build locally — must pass
-7. Opens a PR with `Closes #NN`, a scope ledger, test steps, risk level
-8. Labels it `loop-review-requested`
-9. **Never merges, never enables auto-merge**
+### `/finn-t1` — The Executor (GLM 5.2, runs on cron)
+Applies a **Build Card** exactly. No design decisions, ever.
+1. Dispatch: fix a PR of mine marked `loop-changes-requested`, else claim a `tier:t1` +
+   `agent-ready` issue, else report the queue empty
+2. Refuses any issue with no `## Build Card` section
+3. Checks `## Depends on`, and that the card's verify commands actually exist, **before**
+   editing anything
+4. Confirms the card's verbatim **Anchor** text is present, or stops
+5. Reads only the files the card lists — no repo exploration
+6. Verifies with the card's exact commands, captured with exit codes
+7. **`blocked` is a success. A guessed design decision is a failure even if the code works.**
 
-### `/finn-review` — The Reviewer (runs on cron)
-Each run reviews **exactly one PR**:
-1. Finds the oldest PR with `loop-review-requested` (skips already-reviewed SHAs)
-2. Loads the linked issue (the contract)
-3. Checks mergeability + required CI checks
-4. Posts a 3-group verdict: 🔴 Must fix / 🟡 Should fix / 🟢 Safe to merge
-5. Labels it `loop-changes-requested`, `loop-approved`, or
-   `needs-human-review`
-6. **Never merges, never pushes, never uses a formal GitHub review**
+### `/finn-t2` — The Implementer (Sonnet 5, runs on cron)
+Implements a spec inside a **named file set**. Chooses *how*, not *what*.
+- Stays inside `## Files In Scope`; asks rather than widening it
+- May touch a route that performs an auth check when named; may **not** change how sessions
+  or secrets work
+- Adds tests when the change affects logic, data flow, permissions, or behaviour
+
+### `/finn-t3` — Architect, Spec author, Reviewer (Kimi K3 / Opus 5, runs on cron)
+Dispatch order — first match wins, then stops:
+1. **Review** a PR it did not author → `loop-approved` / `loop-changes-requested` /
+   `needs-human-review`. Evidence gate first: no literal command output with exit codes means
+   rejected without reading the diff
+2. Unblock an issue whose answer is architectural
+3. Build `tier:t3` work — schema, publish/ownership, credentials, renderers, CI
+4. Refill the backlog from `ROADMAP.md` when fewer than 3 issues are `agent-ready`
+
+Never merges. Never applies `agent-ready`.
 
 ---
 
 ## The labels (cheat sheet)
 
-| Label | Color | Meaning |
+| Label | Meaning | Who sets it |
 |---|---|---|
-| `finn-spec` | yellow | Issue filed by finn-spec |
-| `agent-ready` | green | **You** approved the spec — ready to build |
-| `blocked` | red | Builder hit a wall, needs your decision |
-| `loop-review-requested` | blue | PR waiting for review |
-| `loop-changes-requested` | orange | Reviewer found must-fix issues |
-| `loop-approved` | green | Reviewer verified — ready for your merge |
-| `needs-human-review` | purple | Reviewer escalated (ambiguous / no CI) |
+| `finn-spec` | Issue filed by a spec pass | `/finn-t3` or `/finn-spec` |
+| `tier:t1` / `tier:t2` / `tier:t3` | Which model owns it | `/finn-t3` |
+| **`agent-ready`** | **Approved to build** | **You. Only ever you.** |
+| `blocked` | Builder needs a decision | any builder |
+| `loop-review-requested` | PR waiting for review | builder |
+| `loop-changes-requested` | Reviewer found must-fix items | `/finn-t3` |
+| `loop-approved` | Reviewed clean — *evidence*, not a merge instruction | `/finn-t3` |
+| `needs-human-review` | Escalated; leaves the automated queue | `/finn-t3` |
+| `would-auto-merge` | Dry-run: the gate would have merged this | `finn-gate` workflow |
+
+A builder sees an issue only when it is `tier:tN` + `agent-ready` + unassigned + not
+`blocked`. Any one missing and the issue is invisible to it — safe by default.
 
 ---
 
@@ -208,7 +250,7 @@ Each run reviews **exactly one PR**:
 
 This setup assumes a typical project with lint + test + build commands. If your
 project uses different commands (e.g. `pytest`, `cargo test`, `go test`), edit
-the "Verify" step in `.zcode/skills/finn-build/SKILL.md` to match.
+the "Verify" step in `.zcode/skills/finn-t2/SKILL.md` to match.
 
 ---
 

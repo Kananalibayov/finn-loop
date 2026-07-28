@@ -46,6 +46,35 @@ gh issue list --state open --json number,title,labels,assignees
 
 ## 1. Review a PR
 
+### 1a. Have I already reviewed this exact commit?
+
+```bash
+gh pr view <N> --json headRefOid,mergeable,mergeStateStatus,labels
+gh pr view <N> --comments
+```
+
+Find the latest comment whose first line is `Finn-loop review of COMMIT_SHA`.
+
+**Skip the PR** when that recorded SHA equals the current `headRefOid` **and** it already
+carries `loop-approved`, `loop-changes-requested`, or `needs-human-review`. Review again only
+when new commits landed after the recorded SHA. Without this rule the cron re-reviews the same
+commit every five minutes forever.
+
+### 1b. Is there merge evidence to review yet?
+
+```bash
+gh pr checks <N> --required --json bucket,name,state,link
+```
+
+- **Required checks pending, or mergeability still unknown** → report that the PR is waiting,
+  **post nothing and change no labels**, end the pass. A later pass retries it.
+- **A failed required check** is a `[CI]` must-fix finding.
+- **A merge conflict** is a `[DEFECT]` must-fix finding.
+- **No required checks configured at all** → `needs-human-review`. **Never** apply
+  `loop-approved`. Missing CI is never treated as green.
+
+### 1c. The four gates
+
 Order matters. Stop at the first gate that fails.
 
 **Gate 1 — Evidence.** Does the PR body contain literal command output *with exit codes*?
@@ -76,15 +105,40 @@ npm test; echo "EXIT=$?"
 
 Then quote each `AC-N` and state its observed result.
 
+### Finding taxonomy
+
+Every must-fix finding starts with exactly one of these tags:
+
+| Tag | Means |
+|---|---|
+| `[AC-N]` | The PR does not satisfy that acceptance criterion |
+| `[DEFECT]` | The implementation is broken while staying inside scope |
+| `[SECURITY]` | A severe security issue blocks shipping |
+| `[CI]` | A required GitHub check failed |
+| `[SCOPE-CONFLICT AC-N ↔ NG-N]` | An acceptance criterion requires behaviour a non-goal excludes |
+
+Non-goals are binding. On a scope conflict, **do not prescribe code** — record the exact
+contradiction and escalate to `needs-human-review`.
+
 ### Verdict — exactly one of three
 
 | Verdict | When |
 |---|---|
 | `loop-approved` | Every AC verified green by you, personally, just now |
 | `loop-changes-requested` | A **named** AC failed, or a gate above failed |
-| `needs-human-review` | An AC is unverifiable, CI is missing, or the spec is ambiguous |
+| `needs-human-review` | An AC is unverifiable, CI is missing or unconfigured, or the spec is ambiguous |
 
 Reviewer confidence is not a fourth verdict.
+
+### Before you post: re-check the head
+
+```bash
+gh pr view <N> --json headRefOid
+```
+
+If `headRefOid` changed since you gathered your evidence, **discard this review entirely** and
+start again on a future pass. Posting a verdict against a stale SHA is the one failure that can
+let unreviewed code through the merge gate.
 
 ### Block on only four things
 
@@ -96,12 +150,60 @@ and never produce `loop-changes-requested`. LLM reviewers systematically overcor
 requirement conformance — a reviewer that flags conforming code is worse than no reviewer.
 Ground every finding in a re-run command, not in reading the diff.
 
+### 1d. Post the verdict — the first line is a machine contract
+
+`.github/workflows/finn-gate.yml` parses the first line of your comment to decide whether the
+reviewed commit is still the current one. **The first line must be exactly
+`Finn-loop review of <full 40-char SHA>` and nothing else.** No markdown, no prefix, no
+shortened SHA. If you deviate, the gate cannot verify freshness and the PR will never pass.
+
+```md
+Finn-loop review of a1b2c3d4e5f6789012345678901234567890abcd
+
+CI: required checks passed | failed | not configured
+Mergeability: clean | conflicting
+
+## Review
+
+Summary: one or two plain sentences on what this PR does.
+
+## 1. Must fix before merge
+
+None.   (or tagged findings: [AC-2] …, [DEFECT] …, [SECURITY] …, [CI] …)
+
+## 2. Should fix soon
+
+None.   (non-blocking — never causes loop-changes-requested)
+
+## 3. Safe to merge
+
+Yes — automated review evidence is complete.
+```
+
 ```bash
-gh pr comment <N> --body "Finn-loop review of <COMMIT_SHA> ..."
+gh pr comment <N> --body "<the verdict above>"
+```
+
+Then set labels. Check which labels exist first, so removing an absent one does not fail:
+
+- **Clean** → add `loop-approved`, remove `loop-changes-requested`.
+  **Preserve any pre-existing `needs-human-review`** — it may represent a separate human gate
+  that you are not authorised to clear.
+- **Must-fix present** → add `loop-changes-requested`, remove `loop-approved`.
+- **Scope conflict, or no required CI** → add `needs-human-review`, remove **both**
+  `loop-approved` and `loop-changes-requested`, and set "Safe to merge" to
+  `No — human decision required.`
+
+```bash
 gh pr edit <N> --add-label "<verdict>" --remove-label "loop-review-requested"
 ```
 
-**Never merge. Never enable auto-merge. Never push to the PR branch.**
+`needs-human-review` deliberately leaves the automated queue. A human must resolve the cause
+and remove that label before the same commit is reviewed again.
+
+**Never merge. Never enable auto-merge. Never push to the PR branch.** Merging is done by
+GitHub's native auto-merge, gated on the `finn-gate` check — `loop-approved` is evidence, not
+an instruction to merge.
 
 ---
 

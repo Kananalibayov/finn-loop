@@ -169,11 +169,12 @@ Invariant 4 in the north star exists because of this list.
 
 These are contradictions the code and docs cannot resolve on their own.
 
-1. **Merge authority.** `AGENTS.md:35` and `:134` say agents never merge. `AGENTS.md:62-83`
-   and `finn-build` §0a authorise auto-merge. The same file says both. Pick one.
-2. **Retire the dead carve-out.** `AGENTS.md:85-126` authorises self-labelling
-   `agent-ready` for issues #15–#18, which merged long ago. It still reads as live
-   permission.
+1. ~~**Merge authority.**~~ ✅ **Resolved.** No LLM merges; GitHub does, gated on the
+   `finn-gate` required check. `finn-build` (which ran `gh pr merge` from the builder) was
+   deleted, and the contradictory `AGENTS.md` sections were replaced with a single
+   "Merge policy". See [`AGENT-TIERS.md`](./AGENT-TIERS.md) "Merge authority — resolved".
+2. ~~**Retire the dead carve-out.**~~ ✅ **Resolved.** The `agent-ready` self-labelling
+   carve-out for issues #15–#18 was deleted from `AGENTS.md`. No agent may apply that label.
 3. **Retire the stale non-goals.** "Single-operator", "localhost only", "no encryption
    at rest" (`lib/auth.ts:15`, `lib/db.ts:82-83`) were invalidated by the client portal,
    multi-operator teams and internet-facing Plesk provisioning — but never formally

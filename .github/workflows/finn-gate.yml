@@ -1,0 +1,161 @@
+name: finn-gate
+
+# The single mechanical gate between "a reviewer LLM approved this" and "GitHub may
+# auto-merge it". No LLM ever merges; GitHub's native auto-merge does, and it only
+# proceeds when this check passes (make it a required status check on main).
+#
+# Every condition here is deterministic. Nothing in this workflow asks a model anything.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: write # only to enable GitHub's native auto-merge; never a direct merge
+  pull-requests: write # to post the dry-run comment / manage the would-auto-merge label
+
+concurrency:
+  group: finn-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Evaluate gate
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          fail() { echo "BLOCKED: $1"; echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "pass=false" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          # ---- 1. Labels -------------------------------------------------------
+          labels=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | join(",")')
+          echo "Labels: $labels"
+
+          case ",$labels," in
+            *,needs-human-review,*) fail "needs-human-review is present" ;;
+          esac
+          case ",$labels," in
+            *,loop-approved,*) ;;
+            *) fail "loop-approved is absent" ;;
+          esac
+
+          # ---- 2. Reviewed SHA must equal current head -------------------------
+          # finn-t3 posts a comment whose FIRST line is exactly:
+          #   Finn-loop review of <40-char sha>
+          # GitHub does not strip labels when new commits land, so this is the only
+          # thing proving the approved code is the code about to merge.
+          reviewed=$(gh pr view "$PR" --json comments \
+            --jq '[.comments[].body
+                   | split("\n")[0]
+                   | capture("^Finn-loop review of (?<sha>[0-9a-f]{40})\\s*$")?
+                   | .sha] | last // ""')
+          # Strip any surrounding quotes and CR, so this works regardless of whether
+          # gh emits raw or JSON-quoted scalars.
+          reviewed=$(printf '%s' "$reviewed" | tr -d '"\r' | tr -d '[:space:]')
+
+          if [ -z "$reviewed" ]; then
+            fail "no 'Finn-loop review of <sha>' comment found"
+          fi
+          if [ "$reviewed" != "$HEAD_SHA" ]; then
+            fail "review is stale: reviewed $reviewed but head is $HEAD_SHA"
+          fi
+          echo "Reviewed SHA matches head: $HEAD_SHA"
+
+          # ---- 3. Linked issue must not be tier:t3 -----------------------------
+          # Secondary signal only. tier:tN is LLM-assigned at spec time, so the
+          # diff-based checks below are the primary backstop.
+          body=$(gh pr view "$PR" --json body --jq .body)
+          issue=$(printf '%s' "$body" | grep -oiE 'closes #[0-9]+' | head -1 | grep -oE '[0-9]+' || true)
+          if [ -n "$issue" ]; then
+            itiers=$(gh issue view "$issue" --json labels --jq '[.labels[].name] | join(",")' || echo "")
+            echo "Linked issue #$issue labels: $itiers"
+            case ",$itiers," in
+              *,tier:t3,*) fail "linked issue #$issue is tier:t3 — never auto-merges" ;;
+            esac
+          else
+            echo "No linked issue found in PR body (not fatal for this gate)"
+          fi
+
+          # ---- 4. Protected paths ---------------------------------------------
+          git fetch --quiet origin "$BASE_REF"
+          changed=$(git diff --name-only "origin/$BASE_REF...$HEAD_SHA")
+          echo "Changed files:"; echo "$changed"
+
+          protected='^(lib/auth\.ts|middleware\.ts|lib/db\.ts|lib/plesk\.ts|lib/wp\.ts|lib/net\.ts|Dockerfile|docker-compose\.yml|package\.json|package-lock\.json|tsconfig\.json|next\.config\.mjs|\.github/workflows/.*|\.zcode/skills/.*|\.github/CODEOWNERS)$'
+          if hit=$(printf '%s\n' "$changed" | grep -E "$protected" | head -3); then
+            if [ -n "$hit" ]; then
+              fail "touches protected path(s): $(printf '%s' "$hit" | tr '\n' ' ')"
+            fi
+          fi
+
+          # ---- 5. Dangerous content ------------------------------------------
+          # Path lists miss semantics: a tier:t2 PR can add lib/sessionHelper.ts, or
+          # inline ALTER TABLE in a route handler, and evade any filename check.
+          diff=$(git diff "origin/$BASE_REF...$HEAD_SHA" -- . ':(exclude)*.test.mts' ':(exclude)docs/**' ':(exclude)*.md')
+          patterns='jwt\.sign|jwtVerify|SignJWT|bcrypt|hashSync|compareSync|process\.env\.[A-Za-z_]*(SECRET|KEY|TOKEN|PASSWORD)|ALTER TABLE|CREATE TABLE|DROP TABLE|child_process|exec\(|eval\(|timingSafeEqual|randomBytes|Math\.random'
+          # Added lines only (grep '^\+'), excluding the '+++ b/path' file header so a
+          # filename can never trip a content rule.
+          added=$(printf '%s\n' "$diff" | grep -E '^\+' | grep -vE '^\+\+\+ ')
+          if printf '%s\n' "$added" | grep -qE "$patterns"; then
+            found=$(printf '%s\n' "$added" | grep -oE "$patterns" | sort -u | head -3 | tr '\n' ' ')
+            fail "added dangerous content: $found"
+          fi
+
+          echo "All gates green."
+          echo "pass=true" >> "$GITHUB_OUTPUT"
+          echo "reason=all gates green" >> "$GITHUB_OUTPUT"
+
+      - name: Dry-run notice
+        if: steps.gate.outputs.pass == 'true' && vars.FINN_AUTOMERGE != 'on'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh pr edit "$PR" --add-label "would-auto-merge" || true
+          gh pr comment "$PR" --body \
+            "**finn-gate: would auto-merge.** All gates green for \`${{ github.event.pull_request.head.sha }}\`.
+          \`FINN_AUTOMERGE\` is not \`on\`, so nothing was merged — this is the dry run. Merge manually if you agree with the verdict."
+
+      - name: Enable GitHub native auto-merge
+        if: steps.gate.outputs.pass == 'true' && vars.FINN_AUTOMERGE == 'on'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # This does NOT merge. It asks GitHub to merge once every REQUIRED check passes
+          # and required reviews are satisfied. finn-gate is itself a required check, so if a
+          # later commit lands and this gate goes red, GitHub holds the merge automatically.
+          gh pr merge "$PR" --auto --squash
+          gh pr comment "$PR" --body \
+            "**finn-gate: auto-merge enabled** for \`${{ github.event.pull_request.head.sha }}\`. GitHub will merge once all required checks pass. Push any commit to withdraw it."
+
+      - name: Withdraw when gate fails
+        if: steps.gate.outputs.pass != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR" --remove-label "would-auto-merge" || true
+          # Belt and braces: GitHub already holds the merge because this required check is
+          # red, but disabling explicitly makes the withdrawal visible in the PR timeline.
+          gh pr merge "$PR" --disable-auto || true
+
+      - name: Report result
+        run: |
+          if [ "${{ steps.gate.outputs.pass }}" != "true" ]; then
+            echo "::error::finn-gate blocked: ${{ steps.gate.outputs.reason }}"
+            exit 1
+          fi
+          echo "finn-gate passed: ${{ steps.gate.outputs.reason }}"
