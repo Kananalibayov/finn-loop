@@ -48,6 +48,16 @@ Lowest number first. Continue to §1.
 `git status --porcelain` must be empty. If not, report the paths and end the pass — never
 stash, reset, or commit work you did not create.
 
+Then get onto **current** `main`. A clean tree on a stale base is still a stale base:
+
+```bash
+git fetch --prune origin
+git checkout <DEFAULT-BRANCH>
+git pull --ff-only
+```
+
+If `--ff-only` fails, your base diverged — end the pass and report it. Do not force or merge.
+
 Claim before reading deeply:
 
 ```bash

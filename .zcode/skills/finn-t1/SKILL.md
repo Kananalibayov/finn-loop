@@ -54,9 +54,19 @@ git status --porcelain
 Must be empty. If not: report the paths and **end the pass**. Never stash, reset, or commit
 work you did not create.
 
+Then get onto **current** `main` before doing anything else. A clean tree on a stale base is
+still a stale base — a branch cut from an old `main` can read an outdated `ROADMAP.md` and
+rebuild something already shipped:
+
 ```bash
 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
+git fetch --prune origin
+git checkout <DEFAULT-BRANCH>
+git pull --ff-only
 ```
+
+If `git pull --ff-only` fails, your local base diverged — **end the pass** and report it.
+Never force or merge to resolve it yourself.
 
 **You never merge.** You never enable auto-merge. You never push to the default branch.
 

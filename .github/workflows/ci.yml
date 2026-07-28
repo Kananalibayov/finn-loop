@@ -9,15 +9,29 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      # Node is pinned in ONE place: .nvmrc. The Dockerfile ships node:22-alpine,
+      # so CI must stay on the same major or we are testing a runtime the artifact
+      # never uses (GAP-LEDGER pattern 7). Node 20 was end-of-life in April 2026
+      # and could not run the .mts test files at all.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: ".nvmrc"
           cache: "npm"
+
       - name: Install dependencies
         run: npm ci
+
       - name: Typecheck
         run: npx tsc --noEmit
+
+      # Tests existed on main but nothing ran them. An unrun test suite is not a
+      # verifier - see GAP-LEDGER pattern 1.
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build

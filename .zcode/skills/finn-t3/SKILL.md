@@ -214,7 +214,9 @@ slug-ownership model, the durable job runner, the section registry and renderers
 credential lifecycle, every pairing/SSO/health protocol change, cross-cutting contracts, and
 anything in CI or the Docker setup.
 
-Preflight: `git status --porcelain` empty, claim the issue, branch from the default branch.
+Preflight: `git status --porcelain` empty, then `git fetch --prune origin && git checkout
+<DEFAULT-BRANCH> && git pull --ff-only` so you branch from **current** `main` — a clean tree on
+a stale base can rebuild something already shipped. Then claim the issue and branch.
 
 Then, before writing code, state in a comment on the issue:
 
