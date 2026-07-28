@@ -135,13 +135,26 @@ failure rate means the check cannot live inside the agent being checked. Prefer 
 vendors**: different training lineages fail differently, so an error one model is blind to is
 more likely visible to another.
 
+**The rule is "a different model than the author" — not "a frontier model."** Review needs
+independence, not raw capability. Getting this wrong is what made Kimi a per-PR dependency and
+a bottleneck.
+
 | Built by | Review with | Notes |
 |---|---|---|
-| **Kimi K3** (the usual builder) | **Opus 5** | The default pairing. Both high-budget, different vendors |
-| Opus 5 | Kimi K3 | Reverse of the above |
-| Sonnet 5 (T2) | Kimi K3 or Opus 5 | Whichever did not build it |
-| GLM 5.2 (T1) | Kimi K3 or Opus 5 | Cheapest adequate reviewer; T1 diffs are small |
-| Fable 5 | Opus 5 or Kimi K3 | Fable 5 rarely builds, so this is rare |
+| **GLM 5.2** (`tier:t1`) | **Sonnet 5** | The default pairing for carded work. T1 diffs are small and fully specified — Sonnet is more than adequate, and this needs no Kimi at all |
+| **Sonnet 5** (`tier:t2`) | **GLM 5.2** | The reverse. GLM can run the four gates: evidence, scope, invariants, re-run the checks |
+| Kimi K3 (`tier:t3`) | Opus 5 | Frontier work gets a frontier reviewer |
+| Opus 5 (`tier:t3`) | Kimi K3 | Reverse of the above |
+| Fable 5 | Opus 5 or Kimi K3 | Rare — Fable 5 mostly decides rather than builds |
+
+**So Kimi is needed for exactly two things:** implementing `tier:t3` work, and the checkpoint
+audit. It is not in the per-PR loop.
+
+Why this is safe: `finn-t3` step (a) already forbade reviewing your own PR, and its four gates
+are mechanical — is there literal command output, are the files in scope, does the diff violate
+an invariant, do the checks pass when re-run. None of that requires frontier reasoning. What
+*does* require it is deciding the schema or the publish model, which is why those stayed
+`tier:t3`.
 
 Same-family, different-model review (Opus 5 reviewing Fable 5) is acceptable. Same-model
 review is not.

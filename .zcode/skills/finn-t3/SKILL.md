@@ -27,8 +27,12 @@ gh issue list --state open --json number,title,labels,assignees
 
 **(a) A PR is `loop-review-requested` and I am NOT its author** → review it (§1). End.
 
-> If you are the only T3 model available and you authored it, do **not** self-review. Report
-> that it needs a different model or session, and move to the next item.
+> Never self-review. If you authored it, say so and move to the next item.
+
+> **Any tier may run this step.** Review needs independence from the author, not frontier
+> capability — the four gates in §1c are mechanical. In practice Sonnet 5 reviews GLM's
+> `tier:t1` PRs and GLM reviews Sonnet's `tier:t2` PRs, so routine review costs nothing
+> expensive. Reserve Kimi/Opus for `tier:t3` PRs and the checkpoint audit.
 
 **(b) An issue is `blocked` and the answer is architectural rather than a product decision**
 → resolve it: re-card, amend the file set, or correct the spec. Remove `blocked`. End.

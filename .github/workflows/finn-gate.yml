@@ -126,6 +126,69 @@ jobs:
             hold "added dangerous content: $found"
           fi
 
+          # ---- 5b. Ledger-specific regressions --------------------------------
+          # Each of these is a defect class GAP-LEDGER already documents, expressed as
+          # something the diff can be checked for. CI cannot see any of them.
+          if printf '%s\n' "$added" | grep -q 'dangerouslySetInnerHTML'; then
+            hold "adds dangerouslySetInnerHTML — model output must never reach an unsanitised sink"
+          fi
+          # A new srcDoc iframe without sandbox re-opens the stored-XSS path closed by #94.
+          if printf '%s\n' "$added" | grep -q 'srcDoc' && ! printf '%s\n' "$added" | grep -q 'sandbox'; then
+            hold "adds a srcDoc iframe with no sandbox attribute (see GAP-LEDGER blocker 6)"
+          fi
+          # A new API route with no authorization. lib/route-auth.test.mts is the real gate
+          # for this, but catching it here gives a faster, clearer signal.
+          newroutes=$(printf '%s\n' "$changed" | grep -E '^app/api/.*/route\.ts$' || true)
+          for r in $newroutes; do
+            if [ -f "$r" ] && ! grep -qE 'requireRole|requireAdmin|verifySessionRole|verifySession|verifyHealthSecret|consumeLoginToken' "$r"; then
+              hold "route $r has no in-handler authorization (GAP-LEDGER §8)"
+            fi
+          done
+
+          # ---- 5c. The client_id landmine -------------------------------------
+          # GAP-LEDGER: wiring sites.client_id before the change-request state machine,
+          # per-page failure accounting and group-head resolution are merged detonates ~35
+          # latent defects at once - "the single most expensive mistake available in this
+          # codebase". Until the Phase 0.75 isolation test exists, this must not auto-merge.
+          if [ ! -f "lib/portal-isolation.test.mts" ]; then
+            if printf '%s\n' "$added" | grep -qE 'assignProjectToClient|client_id\s*=|set client_id'; then
+              hold "touches client_id / assignProjectToClient before lib/portal-isolation.test.mts exists (ROADMAP Phase 0.75)"
+            fi
+          fi
+
+          # ---- 6. CI must actually be green for THIS commit --------------------
+          # A builder's PR body claiming "EXIT=0" is a string it typed; it proves nothing.
+          # The only trustworthy evidence is the check run itself, and it must belong to the
+          # exact head SHA - a green run against an older commit must not carry a newer one.
+          #
+          # Branch protection also makes `build` required, so GitHub would hold the merge
+          # anyway. Checking here as well means the gate's own verdict is honest rather than
+          # asserting "all green" while knowing nothing about CI.
+          # The gate finishes in seconds; CI takes about a minute. So wait for `build` to
+          # conclude rather than reporting a false block just because it has not started.
+          # Bounded well under this job's timeout-minutes.
+          build_state="pending"
+          for _ in $(seq 1 40); do
+            build_state=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs" \
+              --jq '[.check_runs[] | select(.name=="build")] | last
+                    | if . == null then "missing"
+                      elif .status != "completed" then .status
+                      else (.conclusion // "missing") end' 2>/dev/null || echo "missing")
+            case "$build_state" in
+              queued|in_progress|pending|missing) sleep 10 ;;
+              *) break ;;
+            esac
+          done
+          echo "build check-run for $HEAD_SHA: $build_state"
+
+          case "$build_state" in
+            success)        ;;
+            skipped)        block "CI 'build' was skipped for $HEAD_SHA" ;;
+            missing|queued|in_progress|pending)
+                            block "CI 'build' did not report for $HEAD_SHA within the wait window" ;;
+            *)              block "CI 'build' is '$build_state' for $HEAD_SHA" ;;
+          esac
+
           echo "All gates green."
           echo "pass=true" >> "$GITHUB_OUTPUT"
           echo "verdict=merge" >> "$GITHUB_OUTPUT"
