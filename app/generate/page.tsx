@@ -390,6 +390,7 @@ export default function HomePage() {
                   title="preview"
                   className="preview-frame"
                   srcDoc={previewDoc}
+                  sandbox=""
                 />
               </div>
             </>

@@ -71,7 +71,7 @@ export default function PortalDashboard() {
               </div>
               {p.previewHtml ? (
                 <div className="preview-frame-wrap">
-                  <iframe title="preview" className="preview-frame" srcDoc={p.previewHtml} />
+                  <iframe title="preview" className="preview-frame" srcDoc={p.previewHtml} sandbox="" />
                 </div>
               ) : (
                 <div className="preview-empty">No preview available.</div>
