@@ -92,7 +92,7 @@ that is where the tokens actually go. Never burn a rationed model on a sweep.
 | **Claude Opus 5** | **T3-R primary reviewer** (cross-vendor from Kimi) and T3-A alternate | Good plan, regular use. Being a different vendor from your main builder is exactly what the review rule needs |
 | **Claude Sonnet 5** | **T2 workhorse.** All `[T2]` issues | Good plan. Bounded module work with local judgment is its sweet spot |
 | **ZCode GLM 5.2** | **T1 executor.** Carded `[T1]` issues on the cron loop | Good plan, coding-tuned, and it passed the stop-when-unsure check on its first real run |
-| **GPT 5.6 Terra / Luna** | T2 overflow **only if** you have API access rather than a seat quota | Terra ~2× cheaper than GPT-5.5; Luna cheaper still. Untested here — run the placement test |
+| **GPT 5.6 Terra / Luna** | **No standing slot.** On a $20 seat plan the quota is better spent on a handful of Sol tie-breaks than on volume Terra/Luna could do | GLM 5.2 already covers cheap code work and is coding-tuned. Adding a second cheap generalist buys nothing but another tool to babysit |
 
 **The default pairing is Kimi builds, Opus 5 reviews.** Both are high-budget and different
 vendors, which satisfies the never-review-your-own-work rule without touching a rationed model.
@@ -152,6 +152,40 @@ different vendors**: Opus 5 plus Kimi K3, escalating to **Fable 5 or GPT 5.6 Sol
 disagree.** Those are the changes where a plausible-looking wrong implementation writes
 irreversibly to a client's production WordPress, or drops rows in a migration you cannot roll
 back — and a rationed model is worth spending on a tie-break there.
+
+### Running several agents at once
+
+Yes — but this repo has two hard serialisation points, and ignoring them corrupts state
+rather than merely slowing things down.
+
+**Runs safely in parallel, any number:**
+
+- Read-only work — audits, sweeps, research, spec authoring, code review. Nothing to collide.
+- Builders in **separate git worktrees** with **disjoint `Files In Scope`**.
+- A reviewer on PR A while a builder works PR B.
+
+**Must be serialised — one at a time, repo-wide:**
+
+| Serialisation point | Why | Consequence of ignoring it |
+|---|---|---|
+| **`data/app.db`** | `better-sqlite3` is a synchronous in-process binding on a single cached connection, with **no WAL and no `busy_timeout`** (see [`GAP-LEDGER.md`](./GAP-LEDGER.md) pattern 3). Default rollback-journal mode means writers block readers | A second process touching the file gets `SQLITE_BUSY` with no retry, or tears the file mid-write |
+| **The dev server on :3000** | One port, one process | The second agent silently tests the first agent's build |
+| **A single working tree** | Two builders editing one checkout | Each sees the other's half-finished edits; `git status` preflight fails or, worse, one commits the other's work |
+| **The `finn-build` cron loop** | The cooperative lock is `gh issue edit --add-assignee`, which is per-GitHub-account | Only **one builder loop per repository**, as `finn-build/SKILL.md` states |
+
+**The safe parallel setup** — give each code-writing agent its own checkout:
+
+```bash
+git worktree add ../finn-a -b <branch-a>
+git worktree add ../finn-b -b <branch-b>
+```
+
+Then: only **one** agent runs `npm run dev` or touches `data/app.db`. Everyone else runs
+`npx tsc --noEmit` and `npm test`, which are pure and parallel-safe.
+
+**Practical concurrency ceiling for this repo:** one dev-server/DB agent, plus two or three
+worktree builders on disjoint files, plus unlimited read-only reviewers and auditors. Beyond
+that you are queueing on the database, not on model capacity.
 
 ### Why tier at all — the honest tradeoff
 
