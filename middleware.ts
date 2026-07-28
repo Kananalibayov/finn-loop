@@ -9,6 +9,7 @@ const PUBLIC_PATHS = new Set([
   "/login",
   "/logout",
   "/api/login",
+  "/api/operators/login",
   "/api/wp/pairing/register",
   "/portal/login",
   "/api/portal/login",
