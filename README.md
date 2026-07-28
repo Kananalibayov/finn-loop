@@ -79,17 +79,18 @@ beyond built-in ZCode for now.
 
 ---
 
-## How to register the three tier automations
+## How to register the four automations
 
 ZCode does not allow a scheduled task to create another scheduled task, so register these
-yourself. **Each needs its own git worktree** — three crons against one checkout collide on
-the working tree and on `data/app.db` (see [`docs/AGENT-TIERS.md`](./docs/AGENT-TIERS.md),
+yourself. **Each needs its own git worktree** — crons against one checkout collide on the
+working tree and on `data/app.db` (see [`docs/AGENT-TIERS.md`](./docs/AGENT-TIERS.md),
 "Running several agents at once").
 
 ```bash
 git worktree add ../finn-t1 -b wt/t1
 git worktree add ../finn-t2 -b wt/t2
 git worktree add ../finn-t3 -b wt/t3
+git worktree add ../finn-audit -b wt/audit
 ```
 
 Then, in a ZCode session, register one automation per tier — for example:
@@ -102,6 +103,22 @@ Then, in a ZCode session, register one automation per tier — for example:
 Repeat for `/finn-t1` (dir `..\finn-t1`) and `/finn-t2` (dir `..\finn-t2`).
 
 **Only the T3 automation may run the dev server or touch `data/app.db`.**
+
+### The 4th automation: the audit, driven by the existing nudge
+
+`.github/workflows/audit-nudge.yml` already computes when an audit is due (5+ merges since
+the last checkpoint in [`docs/AUDIT-LOG.md`](./docs/AUDIT-LOG.md)) and keeps exactly one
+"Audit due" issue open when it is. Rather than duplicate that due-ness logic in a second
+place, this automation just checks for that issue and acts on it:
+
+> Schedule an automation titled "Finn-loop audit (daily)" that runs once a day.
+> Prompt: "Work from the repo at C:\Users\newke\finn-audit. Run:
+> `gh issue list --state open --search 'in:title \"Audit due\"' --json number --jq 'length'`.
+> If it returns 0, report that no audit is due and stop — do not run /finn-audit.
+> If it returns 1 or more, run /finn-audit now. Report what it found."
+
+A **daily** cadence is deliberate — the audit is batch work over an accumulated set of
+merges, not a per-PR check, so 5-minute polling would just waste runs finding nothing new.
 
 To list or delete automations, say *"list my automations"* in any session.
 
