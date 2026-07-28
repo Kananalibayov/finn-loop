@@ -22,20 +22,30 @@ Current state: [`docs/STATE-OF-THE-BUILD.md`](./docs/STATE-OF-THE-BUILD.md).
 > asserts a *published* page is fetchable from a real WordPress, the loop cannot distinguish
 > working from broken and will keep manufacturing defects faster than they can be reviewed.
 
-- [ ] `/api/health` route (public in middleware) returning resolved DB path + git sha
+- [x] `/api/health` route (public in middleware) returning resolved DB path + git sha — **#103 (#117)**
 - [ ] CI job: `docker build .`, boot the image with a throwaway `.env` beside a **real
-      WordPress container** and a mocked OpenAI
+      WordPress container** and a mocked OpenAI — **#104**
 - [ ] Smoke script asserting the golden path: login → generate 5 shape-valid pages → push →
       **publish → page fetchable at a real URL with 200** → every internal link in the
-      exported ZIP resolves to a file in the archive
-- [ ] Pin Node once (`engines` + `.nvmrc` + `node-version-file`) so CI and the image agree —
-      today CI is Node 20/glibc and the artifact is Node 22/musl
+      exported ZIP resolves to a file in the archive — **#107**
+- [x] Pin Node once (`engines` + `.nvmrc` + `node-version-file`) so CI and the image agree —
+      done in #108; CI and the Docker artifact both run Node 22
 - [ ] Delete the inert `npm rebuild better-sqlite3` step
-- [ ] Add `npm run lint` and `npm test` to CI; ESLint rules banning `catch {}`, unlogged
-      catches, and `{ok:true}` not derived from a checked variable
+- [x] Add `npm test` to CI — done in #108 (46 passing, including a route-auth ratchet over
+      GAP-LEDGER §8)
+- [ ] Add `npm run lint` to CI with ESLint rules banning `catch {}`, unlogged catches, and
+      `{ok:true}` not derived from a checked variable — **#109** (`next lint` is currently
+      interactive/broken and would hang CI; fix that first)
 - [ ] Build and push `ghcr.io/…:${sha}` so rollback is a version edit, not a rebuild on prod
 - [ ] Nightly job that **restores from the documented backup and asserts a row count** — the
       current documented command names a volume Compose never creates, so it copies nothing
+
+> **Also done, ahead of this list:** the CI/merge pipeline itself was hardened — Node pin,
+> `finn-gate` (mechanical merge gate reading the real CI check-run for the head SHA, not an
+> Evidence block), branch protection, `label-guard`, auto-revert-on-red-main, and any tier may
+> review any other tier's work (Sonnet ↔ GLM), reserving Kimi/Opus for `tier:t3` only. See
+> `docs/PIPELINE.md` and `docs/AGENT-TIERS.md`. **Keep this checklist in sync as items merge —
+> a stale checkbox here caused a T3 pass to re-spec already-finished work (issue #114).**
 
 **Demo:** CI fails when a page is not actually published. Prove it by reverting the publish
 step and watching the pipeline go red.
@@ -59,8 +69,7 @@ step and watching the pipeline go red.
       `lib/net.test.mts` (31 cases, the repo's first test)
 - [ ] Apply `assertPublicHttpTarget` to `template-from-url`, **including every redirect hop**
       (authenticated SSRF with content read-back, reachable by `viewer`)
-- [ ] `sandbox=""` on the four `srcDoc` iframes — model output currently executes in the
-      operator's authenticated origin
+- [x] `sandbox=""` on the four `srcDoc` iframes — done in #94/#105
 - [ ] `assertPublicHttpTarget()` before every server-side fetch (three SSRF paths, one on an
       unauthenticated endpoint) + request body size limits + rate limiting on login
 - [ ] Settings sub-sections: render read-only with Retry on load failure, so a failed GET can
