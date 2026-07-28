@@ -1,0 +1,42 @@
+# CI-only. Throwaway credentials for containers that live for one job. Never deploy from this file.
+services:
+  app:
+    build:
+      context: .
+      args:
+        COMMIT_SHA: ${COMMIT_SHA:-unknown}
+    depends_on:
+      - openai-mock
+    environment:
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
+      ADMIN_SESSION_SECRET: ci-throwaway-session-secret-0123456789abcdef
+      OPENAI_API_KEY: sk-ci-throwaway
+      OPENAI_BASE_URL: http://openai-mock:4010/v1
+    ports:
+      - "3000:3000"
+
+  openai-mock:
+    image: node:22-alpine
+    volumes:
+      - ./ci:/ci:ro
+    command: ["node", "/ci/openai-mock.mjs"]
+
+  db:
+    image: mariadb:11
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "1"
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wp
+      MYSQL_PASSWORD: ci-throwaway
+
+  wordpress:
+    image: wordpress:6-apache
+    depends_on:
+      - db
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: ci-throwaway
+      WORDPRESS_DB_NAME: wordpress
+    ports:
+      - "8080:80"
