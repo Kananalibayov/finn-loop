@@ -10,6 +10,8 @@ jobs:
   docker-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      IMAGE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +27,7 @@ jobs:
           echo "ADMIN_PASSWORD_HASH=$HASH" >> "$GITHUB_ENV"
 
       - name: Build CI image
-        run: COMMIT_SHA="${{ github.sha }}" docker compose -f docker-compose.ci.yml build
+        run: COMMIT_SHA="$IMAGE_SHA" docker compose -f docker-compose.ci.yml build
 
       - name: Boot CI stack
         run: docker compose -f docker-compose.ci.yml up -d
@@ -51,7 +53,7 @@ jobs:
           node -e '
             const fs = require("node:fs");
             const health = JSON.parse(fs.readFileSync("/tmp/health.json", "utf8"));
-            const expectedSha = process.env.GITHUB_SHA;
+            const expectedSha = process.env.IMAGE_SHA;
             if (health.status !== "ok") throw new Error(`status=${health.status}`);
             if (health.sha !== expectedSha) throw new Error(`sha=${health.sha} expected=${expectedSha}`);
             if (!health.db || !String(health.db.path).endsWith("/app/data/app.db")) {
