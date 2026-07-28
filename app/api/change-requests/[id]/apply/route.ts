@@ -1,5 +1,7 @@
 // Apply a change request via NL editing: edit all pages using the instruction,
 // save as a new version, mark the request completed, optionally push to WP.
+// Issue #100 (GAP-LEDGER §8.1): editor-or-above — a viewer could otherwise apply
+// pending requests and skip operator approval entirely.
 import { NextRequest, NextResponse } from "next/server";
 import {
   getChangeRequestById,
@@ -12,6 +14,7 @@ import {
 import { applyEdit } from "@/lib/nl-edit";
 import { notifyClientRequestCompleted } from "@/lib/email";
 import { WpClient } from "@/lib/wp";
+import { COOKIE_NAME, requireRole } from "@/lib/auth";
 import type { GeneratedPage, PageKey } from "@/lib/types";
 
 const PAGE_SLUG: Record<PageKey, string> = {
@@ -29,6 +32,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await requireRole(req.cookies.get(COOKIE_NAME)?.value, "editor");
+  if (!session) {
+    return NextResponse.json({ error: "Editor access or above required." }, { status: 403 });
+  }
+
   const { id } = await params;
   const num = Number(id);
   if (!Number.isInteger(num) || num <= 0) {

@@ -8,6 +8,7 @@ import {
   saveAppSettings,
   getEffectiveGenerationModel,
 } from "@/lib/db";
+import { COOKIE_NAME, requireRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,13 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  // Issue #100 (GAP-LEDGER §8.1): admin-only — writes platform config incl. the
+  // OpenAI key. GET stays open to any operator role (safe projection only).
+  const session = await requireRole(req.cookies.get(COOKIE_NAME)?.value, "admin");
+  if (!session) {
+    return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+  }
+
   let body: { openaiApiKey?: string; generationModel?: string };
   try {
     body = (await req.json()) as typeof body;

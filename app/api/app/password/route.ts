@@ -3,7 +3,7 @@
 // Operator-only (behind middleware). newPassword must be >= 8 chars.
 
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPasswordAgainstHash, hashPassword } from "@/lib/auth";
+import { verifyPasswordAgainstHash, hashPassword, COOKIE_NAME, requireRole } from "@/lib/auth";
 import { getAppSettings, saveAppSettings } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -12,6 +12,12 @@ export const dynamic = "force-dynamic";
 const MIN_LENGTH = 8;
 
 export async function POST(req: NextRequest) {
+  // Issue #100 (GAP-LEDGER §8.1): admin-only — changes the platform admin password.
+  const session = await requireRole(req.cookies.get(COOKIE_NAME)?.value, "admin");
+  if (!session) {
+    return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+  }
+
   let body: { currentPassword?: string; newPassword?: string };
   try {
     body = (await req.json()) as typeof body;
