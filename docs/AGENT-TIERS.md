@@ -66,27 +66,67 @@ benchmark score or a vendor's positioning.
 That last check matters most and is the one most models fail: 88% of agent trajectories
 narrate self-verification, and 35.7% of those still ship a wrong patch.
 
-### Your roster
+### Match model scarcity to token volume, not just to difficulty
 
-The Claude models and GLM are placed with confidence. **Models released after this was
-written cannot be reliably ranked from the outside — run the placement test rather than
-trusting any ranking, including one in this table.**
+The intuitive allocation — "strongest model on the hardest work" — wastes a scarce model,
+because difficulty and token volume are not the same axis:
 
-| Model | Slot | Basis |
+| Work | Token volume | Cost of getting it wrong |
 |---|---|---|
-| **Claude Fable 5** | T3-A / T3-S / T3-R | Verified |
-| **Claude Opus 5** | T3-A / T3-S / T3-R | Verified |
-| **Claude Sonnet 5** | T2 default; T3 for well-scoped work, promoted deliberately | Verified |
-| **ZCode GLM 5.2** | T1 | Verified — it passed the stop-when-unsure check on its first real run |
-| **Kimi K3 Swarm** (vendor's top) | T3 — confirm with the placement test | Vendor tier only |
-| **GPT 5.6 Sol** (vendor's top) | T3 — confirm with the placement test | Vendor tier only |
-| Lower Kimi / GPT variants | T2 if they pass the scope check. **Not T1** without testing | Unverified |
+| **A decision** (schema shape, page-ownership model, whether the LLM may emit markup) | **Low** — one conversation and a doc | Catastrophic and often irreversible |
+| **An implementation** (build the section registry, write the renderers) | **High** — long sessions, many files, many iterations | Recoverable; the diff is reviewable |
+| **An audit or sweep** (find every instance across 53 routes) | **Very high** — must read broadly | Low; findings get verified anyway |
 
-**On lower-tier variants from a strong vendor:** do not assume a smaller model from a frontier
-lab beats GLM 5.2 at T1. T1 work is mechanical instruction-following on code — exactly what
-coding-tuned models are trained for and what small general-purpose models are weakest at.
-Small-model failures concentrate in tool use and syntax (42% tool-use errors for one
-open model), which is precisely T1's job description. Test before substituting.
+So: put your **scarcest, strongest** model on decisions, because decisions are cheap in tokens
+and expensive to get wrong. Put your **highest-budget strong** model on implementation, because
+that is where the tokens actually go. Never burn a rationed model on a sweep.
+
+### Roster and standing assignment
+
+| Model | Standing slot | Why here |
+|---|---|---|
+| **Claude Fable 5** | **T3-A decisions only** — the irreversible ones: schema rebuild, publish/slug-ownership, credential lifecycle, "may the model emit markup". Plus second reviewer on those | Rationed. Decisions are low-volume, so a rationed model fits exactly. Do not use it to implement or sweep |
+| **GPT 5.6 Sol** | **Escalation / tie-break only.** The independent third opinion when a T3-A decision is contested or a two-reviewer split needs breaking | Minimal plan. `Sol Ultra` parallelises with subagents (91.9% vs 88.8% on Terminal-Bench 2.1 agentic coding) — worth spending on one hard call, not on volume |
+| **Kimi K3 Max** | **T3 implementation workhorse.** Build the section registry, the renderers, the job runner, the schema migration | Designed for exactly this: sustained multi-step engineering sessions — read repo, run tests, interpret failures, iterate. 1M context. High budget, so use it heavily |
+| **Kimi K3 Swarm Max** | **Breadth work.** Audits, multi-file sweeps, migrations across many call sites, option exploration, parallel verification | Agent Swarm coordinates parallel sub-agents. Ideal for "find every instance of X". See the caution below |
+| **Claude Opus 5** | **T3-R primary reviewer** (cross-vendor from Kimi) and T3-A alternate | Good plan, regular use. Being a different vendor from your main builder is exactly what the review rule needs |
+| **Claude Sonnet 5** | **T2 workhorse.** All `[T2]` issues | Good plan. Bounded module work with local judgment is its sweet spot |
+| **ZCode GLM 5.2** | **T1 executor.** Carded `[T1]` issues on the cron loop | Good plan, coding-tuned, and it passed the stop-when-unsure check on its first real run |
+| **GPT 5.6 Terra / Luna** | T2 overflow **only if** you have API access rather than a seat quota | Terra ~2× cheaper than GPT-5.5; Luna cheaper still. Untested here — run the placement test |
+
+**The default pairing is Kimi builds, Opus 5 reviews.** Both are high-budget and different
+vendors, which satisfies the never-review-your-own-work rule without touching a rationed model.
+Fable 5 and Sol stay out of the routine loop.
+
+### Caution on swarm and parallel-subagent modes
+
+`K3 Swarm Max` and `Sol Ultra` both get their advantage by fanning out to parallel sub-agents.
+That is excellent for **discovery** — breadth, coverage, "find everything" — and it is how the
+162-defect audit in [`GAP-LEDGER.md`](./GAP-LEDGER.md) was produced.
+
+It is a worse fit for producing **one coherent surgical diff**, where parallel workers can
+each make locally-reasonable but mutually inconsistent choices. So:
+
+- **Swarm / Ultra** → audits, sweeps, exploring options, verification fan-out.
+- **K3 Max (non-swarm)** → implementing a single feature coherently.
+
+### A specific assignment worth making
+
+Kimi K3 has native **visual-to-code and screenshot-based debugging.** Two pieces of this
+roadmap are exactly that shape and should go to it deliberately:
+
+- `template-from-image` / `template-from-url` intake — currently reconstructs design from class
+  names with the CSS stripped (see [`STATE-OF-THE-BUILD.md`](./STATE-OF-THE-BUILD.md)).
+- Visual QA of section-registry variants at 360 / 768 / 1280 / 1920 px against the
+  [`NORTH-STAR.md`](./NORTH-STAR.md) §4 quality bar.
+
+### On lower-tier variants from a strong vendor
+
+Do not assume a smaller model from a frontier lab beats GLM 5.2 at T1. T1 work is mechanical
+instruction-following on code — exactly what coding-tuned models are trained for and what small
+general-purpose models are weakest at. Small-model failures concentrate in tool use and syntax
+(42% tool-use errors for one open model), which is precisely T1's job description. Put cheap
+frontier variants at **T2**, where local judgment is the actual requirement, and test first.
 
 ### Cross-vendor review
 
@@ -95,21 +135,23 @@ failure rate means the check cannot live inside the agent being checked. Prefer 
 vendors**: different training lineages fail differently, so an error one model is blind to is
 more likely visible to another.
 
-| Built by | Review with |
-|---|---|
-| A Claude model | Kimi, GPT, or a *different* Claude model |
-| Kimi | Claude or GPT |
-| GPT | Claude or Kimi |
-| GLM 5.2 (T1) | any T3-slot model |
+| Built by | Review with | Notes |
+|---|---|---|
+| **Kimi K3** (the usual builder) | **Opus 5** | The default pairing. Both high-budget, different vendors |
+| Opus 5 | Kimi K3 | Reverse of the above |
+| Sonnet 5 (T2) | Kimi K3 or Opus 5 | Whichever did not build it |
+| GLM 5.2 (T1) | Kimi K3 or Opus 5 | Cheapest adequate reviewer; T1 diffs are small |
+| Fable 5 | Opus 5 or Kimi K3 | Fable 5 rarely builds, so this is rare |
 
 Same-family, different-model review (Opus 5 reviewing Fable 5) is acceptable. Same-model
 review is not.
 
 **For the highest-risk items** — the schema rebuild, the publish/slug-ownership model, the
 credential lifecycle, anything touching secrets — require **two independent T3 reviews from
-different vendors**. Those are the changes where a plausible-looking wrong implementation
-writes irreversibly to a client's production WordPress, or drops rows in a migration you
-cannot roll back.
+different vendors**: Opus 5 plus Kimi K3, escalating to **Fable 5 or GPT 5.6 Sol only if they
+disagree.** Those are the changes where a plausible-looking wrong implementation writes
+irreversibly to a client's production WordPress, or drops rows in a migration you cannot roll
+back — and a rationed model is worth spending on a tie-break there.
 
 ### Why tier at all — the honest tradeoff
 
