@@ -1272,3 +1272,5 @@ textarea:focus {
   padding: 1px 6px;
   border-radius: 4px;
 }
+
+/* gate probe: exercises the full finn-gate path including the CI check-run read. Reverted after. */
