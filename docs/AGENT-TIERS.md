@@ -148,7 +148,9 @@ a bottleneck.
 | Fable 5 | Opus 5 or Kimi K3 | Rare — Fable 5 mostly decides rather than builds |
 
 **So Kimi is needed for exactly two things:** implementing `tier:t3` work, and the checkpoint
-audit. It is not in the per-PR loop.
+audit (`/finn-audit` — see [`PIPELINE.md`](./PIPELINE.md) §2 and
+[`../.zcode/skills/finn-audit/SKILL.md`](../.zcode/skills/finn-audit/SKILL.md)). It is not in
+the per-PR loop.
 
 Why this is safe: `finn-t3` step (a) already forbade reviewing your own PR, and its four gates
 are mechanical — is there literal command output, are the files in scope, does the diff violate

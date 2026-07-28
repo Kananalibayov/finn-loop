@@ -64,7 +64,7 @@ acting on a deterministic check.
 
 ---
 
-## 2. Three standing commands — one per model
+## 2. Four standing commands — one per model, plus a periodic one
 
 These never change. Same command every time, for the whole life of the project.
 
@@ -73,9 +73,22 @@ These never change. Same command every time, for the whole life of the project.
 | **GLM 5.2** | `/finn-t1` | "What carded, mechanical work is waiting for me?" |
 | **Sonnet 5** | `/finn-t2` | "What bounded module work is waiting for me?" |
 | **Kimi K3 / Opus 5** | `/finn-t3` | "What needs review, spec, or architectural work?" |
+| **Kimi K3 / Opus 5** | `/finn-audit` | "What did the batch of unsupervised T1/T2 work miss?" — run periodically, not per-PR |
 
 Say **"continue"** or run the command. The model does the rest. It never asks you what to
 build, because the queue already says.
+
+**`/finn-audit` is different in kind, not just cadence.** The other three answer "what's
+next"; the audit answers "what got missed." It diffs `main` since the last checkpoint in
+[`AUDIT-LOG.md`](./AUDIT-LOG.md), checks the accumulated batch against every
+`NORTH-STAR` invariant and all seven `GAP-LEDGER` patterns — none of which `tsc`/`npm
+test`/`next build` can see — fixes what it finds, and can propose (but never self-approve)
+backlog additions. Run it when `audit-nudge` opens or updates an "Audit due" issue (default:
+every 5 merges since the last checkpoint), or any time you say "kimi, audit."
+
+This is also where drift in the *pipeline itself* gets caught — `ROADMAP.md`'s checklist
+going stale relative to merged work (which caused issue #114, a re-specced duplicate) is
+exactly the kind of thing routine per-PR review won't notice but a periodic batch check will.
 
 ---
 
