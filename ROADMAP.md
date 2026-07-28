@@ -22,7 +22,7 @@ Current state: [`docs/STATE-OF-THE-BUILD.md`](./docs/STATE-OF-THE-BUILD.md).
 > asserts a *published* page is fetchable from a real WordPress, the loop cannot distinguish
 > working from broken and will keep manufacturing defects faster than they can be reviewed.
 
-- [ ] `/api/health` route (public in middleware) returning resolved DB path + git sha — **#103**
+- [x] `/api/health` route (public in middleware) returning resolved DB path + git sha — **#103 (#117)**
 - [ ] CI job: `docker build .`, boot the image with a throwaway `.env` beside a **real
       WordPress container** and a mocked OpenAI — **#104**
 - [ ] Smoke script asserting the golden path: login → generate 5 shape-valid pages → push →
