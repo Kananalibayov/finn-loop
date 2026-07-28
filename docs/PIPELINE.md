@@ -166,6 +166,44 @@ GitHub itself and cannot be bypassed by a faulty workflow.
 | unset / anything but `on` | **Dry run.** Gate still reports pass/fail, comments what it *would* merge, applies `would-auto-merge`. Nothing merges |
 | `on` | Live. Passing PRs get GitHub auto-merge enabled |
 
+### Three outcomes, not two
+
+| Verdict | Check | Auto-merge | Meaning |
+|---|---|---|---|
+| **merge** | 🟢 green | enabled | Everything clear. GitHub merges when required checks pass |
+| **hold** | 🟢 green | **not** enabled | Nothing is wrong — this needs a deliberate human. Protected path, added dangerous content, `tier:t3`, or `needs-human-review`. A comment explains which |
+| **block** | 🔴 red | no | Something *is* wrong: no `loop-approved`, a stale review, or CI red for this SHA |
+
+A **hold is green on purpose.** If it went red, then with `gate` as a required check every
+protected-path PR would be unmergeable without an admin bypass — and most infrastructure work
+touches protected paths, so the gate would block the work needed to improve the gate.
+
+### Who can review
+
+**Any tier may review, as long as it is not the author.** Independence is the requirement, not
+capability — the four review gates are mechanical. So **Sonnet 5 reviews GLM's `tier:t1` PRs and
+GLM reviews Sonnet's `tier:t2` PRs**, and Kimi is needed only for `tier:t3` work and the
+checkpoint audit.
+
+### What is actually enforced — read this before trusting the labels
+
+Be clear-eyed about where the real boundary is:
+
+| Control | Enforced against an agent? |
+|---|---|
+| Required CI (`build`) | ✅ Mechanical. Cannot be asserted away |
+| Protected-path scan | ✅ Mechanical, diff-based |
+| Dangerous-content scan | ✅ Mechanical, diff-based |
+| Reviewed-SHA freshness | ✅ Mechanical |
+| `route-auth.test.mts` ratchet | ✅ Mechanical |
+| `loop-approved` / `agent-ready` labels | ❌ **No.** Every agent authenticates as the repo owner, so `label-guard` cannot tell an agent from you |
+| Branch protection | ❌ **No.** `enforce_admins` is off (required, or a red `main` plus an unreviewed revert PR would deadlock), and agents hold an admin token |
+
+**Labels and branch protection are coordination, not security.** The mechanical checks are the
+security boundary. The single highest-value change to make this real is **giving agents their own
+GitHub identity** — a machine user or scoped PAT — at which point `label-guard` and branch
+protection both start enforcing rather than advising.
+
 Leave it unset until the gate's verdicts have matched your own manual decisions for a week or
 two. Setting it back is an instant, total stop — no branch-protection edits needed.
 
