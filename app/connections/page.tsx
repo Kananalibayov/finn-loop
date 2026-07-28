@@ -166,18 +166,13 @@ export default function ConnectionsPage() {
     }
   }
 
-  // AC-5 (issue #40): test a connection. Carries forward the #32/#35 caveat —
-  // the safe API projection never returns the password, so a client-side test
-  // without re-entering creds reports "need password". The button remains so
-  // the operator can trigger it; the result renders inline on the card.
+  // AC-5 (issue #40): test a connection using its stored credentials
+  // (looked up server-side by id — the safe API projection never returns
+  // the password to the browser, so the client can't resend it).
   async function handleTest(conn: Connection) {
     setTestStates((s) => ({ ...s, [conn.id]: { status: "testing" } }));
     try {
-      const res = await fetch("/api/wp/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiUrl: conn.apiUrl, username: conn.username, appPassword: "" }),
-      });
+      const res = await fetch(`/api/wp/connections/${conn.id}/test`, { method: "POST" });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         username?: string;
@@ -192,7 +187,7 @@ export default function ConnectionsPage() {
       } else {
         setTestStates((s) => ({
           ...s,
-          [conn.id]: { status: "error", message: data.error || "Test requires the password to be re-entered." },
+          [conn.id]: { status: "error", message: data.error || "Test failed." },
         }));
       }
     } catch (e) {
