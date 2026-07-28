@@ -1,0 +1,113 @@
+name: revert-red-main
+
+# If `main` goes red, open a revert PR immediately and tell the owner.
+#
+# Why this matters more than it looks: with auto-merge enabled, nothing is watching main
+# between the moment a bad commit lands and the moment a human happens to look. Every
+# subsequent builder pass then branches from a broken base, fails its own verify step, and
+# correctly marks itself `blocked` - so the whole queue silently drains to zero and the
+# pipeline appears "quiet" rather than "broken". This makes that state self-announcing and
+# gives you a one-click undo.
+#
+# It only ever OPENS a PR. It never merges and never pushes to main, so a bug here cannot
+# itself damage the branch.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write # to push the revert branch (never to main)
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: revert-red-main
+  cancel-in-progress: false
+
+jobs:
+  revert:
+    # Only on a genuine failure of CI on main. Skips cancelled and skipped runs, which are
+    # not signal.
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Open a revert PR for the offending commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+
+          short=$(git rev-parse --short "$BAD_SHA")
+          subject=$(git log -1 --format=%s "$BAD_SHA")
+          branch="revert/${short}"
+
+          # If main has already moved past this commit and someone fixed it forward, a revert
+          # may be wrong. Only act when the failing commit is still main's tip.
+          tip=$(git rev-parse HEAD)
+          if [ "$tip" != "$BAD_SHA" ]; then
+            echo "main has moved on (tip=$tip, failing=$BAD_SHA). Not reverting."
+            gh issue create \
+              --title "CI failed on main at ${short} (already superseded)" \
+              --body "CI failed on \`${short}\` (\"${subject}\") but \`main\` has since moved to \`$(git rev-parse --short HEAD)\`, so no revert PR was opened.
+
+          Run: ${RUN_URL}
+
+          Check whether the failure was fixed forward or is still present." || true
+            exit 0
+          fi
+
+          # Idempotency: a re-run of the same CI failure must not open a second PR.
+          if gh pr list --state open --head "$branch" --json number --jq 'length' | grep -qv '^0$'; then
+            echo "Revert PR for $short already open. Nothing to do."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+
+          # -m 1 handles a merge commit; plain revert handles a squash commit. Try both.
+          if ! git revert --no-edit "$BAD_SHA" 2>/dev/null; then
+            git revert --abort 2>/dev/null || true
+            if ! git revert --no-edit -m 1 "$BAD_SHA" 2>/dev/null; then
+              git revert --abort 2>/dev/null || true
+              echo "Could not revert $short cleanly."
+              gh issue create \
+                --title "🔴 main is RED at ${short} and does not revert cleanly" \
+                --body "CI failed on \`${short}\` (\"${subject}\") and an automatic revert did not apply cleanly. **Manual intervention needed.**
+
+          Run: ${RUN_URL}
+
+          Until this is fixed, every builder branches from a broken base and will correctly mark itself \`blocked\` — the queue will look idle rather than broken." || true
+              exit 1
+            fi
+          fi
+
+          git push --quiet origin "$branch"
+
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "Revert \"${subject}\"" \
+            --body "🔴 **\`main\` is red.** CI failed on \`${short}\` and this reverts it.
+
+          Failing run: ${RUN_URL}
+
+          ## What to do
+
+          - **Merge this** to get \`main\` green again. That is usually the right call — a red \`main\` blocks every builder, because each one branches from it, fails its own verify step, and marks itself \`blocked\`. The queue then looks idle rather than broken.
+          - **Or close this** if you would rather fix forward.
+
+          Opened automatically by \`revert-red-main\`. Nothing was merged or pushed to \`main\`." \
+            --label "needs-human-review" || true

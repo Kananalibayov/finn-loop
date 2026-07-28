@@ -21,6 +21,7 @@ concurrency:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,18 +36,30 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          fail() { echo "BLOCKED: $1"; echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "pass=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          # Two different outcomes, deliberately distinguished:
+          #
+          #   block <reason>  -> the check goes RED. Something is wrong: no review, or the
+          #                      review is stale. Nothing should merge, by hand or otherwise.
+          #
+          #   hold <reason>   -> the check stays GREEN but auto-merge is NOT enabled. Nothing
+          #                      is wrong; this change just needs a deliberate human. If this
+          #                      went red instead, then once `gate` becomes a required check
+          #                      every protected-path PR would be unmergeable without an admin
+          #                      bypass - a deadlock, since most infrastructure work touches
+          #                      protected paths.
+          block() { echo "BLOCKED: $1"; echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "pass=false" >> "$GITHUB_OUTPUT"; echo "verdict=block" >> "$GITHUB_OUTPUT"; exit 0; }
+          hold()  { echo "HELD FOR HUMAN: $1"; echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "pass=false" >> "$GITHUB_OUTPUT"; echo "verdict=hold" >> "$GITHUB_OUTPUT"; exit 0; }
 
           # ---- 1. Labels -------------------------------------------------------
           labels=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | join(",")')
           echo "Labels: $labels"
 
           case ",$labels," in
-            *,needs-human-review,*) fail "needs-human-review is present" ;;
+            *,needs-human-review,*) hold "needs-human-review is present" ;;
           esac
           case ",$labels," in
             *,loop-approved,*) ;;
-            *) fail "loop-approved is absent" ;;
+            *) block "loop-approved is absent" ;;
           esac
 
           # ---- 2. Reviewed SHA must equal current head -------------------------
@@ -64,10 +77,10 @@ jobs:
           reviewed=$(printf '%s' "$reviewed" | tr -d '"\r' | tr -d '[:space:]')
 
           if [ -z "$reviewed" ]; then
-            fail "no 'Finn-loop review of <sha>' comment found"
+            block "no 'Finn-loop review of <sha>' comment found"
           fi
           if [ "$reviewed" != "$HEAD_SHA" ]; then
-            fail "review is stale: reviewed $reviewed but head is $HEAD_SHA"
+            block "review is stale: reviewed $reviewed but head is $HEAD_SHA"
           fi
           echo "Reviewed SHA matches head: $HEAD_SHA"
 
@@ -80,7 +93,7 @@ jobs:
             itiers=$(gh issue view "$issue" --json labels --jq '[.labels[].name] | join(",")' || echo "")
             echo "Linked issue #$issue labels: $itiers"
             case ",$itiers," in
-              *,tier:t3,*) fail "linked issue #$issue is tier:t3 — never auto-merges" ;;
+              *,tier:t3,*) hold "linked issue #$issue is tier:t3 — never auto-merges" ;;
             esac
           else
             echo "No linked issue found in PR body (not fatal for this gate)"
@@ -96,7 +109,7 @@ jobs:
           protected='^(lib/auth\.ts|middleware\.ts|lib/db\.ts|lib/plesk\.ts|lib/wp\.ts|lib/net\.ts|Dockerfile|docker-compose\.yml|package\.json|package-lock\.json|tsconfig\.json|next\.config\.mjs|\.nvmrc|\.github/workflows/.*|\.zcode/skills/.*|\.github/CODEOWNERS|AGENTS\.md|ROADMAP\.md|docs/.*)$'
           if hit=$(printf '%s\n' "$changed" | grep -E "$protected" | head -3); then
             if [ -n "$hit" ]; then
-              fail "touches protected path(s): $(printf '%s' "$hit" | tr '\n' ' ')"
+              hold "touches protected path(s): $(printf '%s' "$hit" | tr '\n' ' ')"
             fi
           fi
 
@@ -110,11 +123,12 @@ jobs:
           added=$(printf '%s\n' "$diff" | grep -E '^\+' | grep -vE '^\+\+\+ ')
           if printf '%s\n' "$added" | grep -qE "$patterns"; then
             found=$(printf '%s\n' "$added" | grep -oE "$patterns" | sort -u | head -3 | tr '\n' ' ')
-            fail "added dangerous content: $found"
+            hold "added dangerous content: $found"
           fi
 
           echo "All gates green."
           echo "pass=true" >> "$GITHUB_OUTPUT"
+          echo "verdict=merge" >> "$GITHUB_OUTPUT"
           echo "reason=all gates green" >> "$GITHUB_OUTPUT"
 
       - name: Dry-run notice
@@ -143,21 +157,43 @@ jobs:
           gh pr comment "$PR" --body \
             "**finn-gate: auto-merge enabled** for \`${{ github.event.pull_request.head.sha }}\`. GitHub will merge once all required checks pass. Push any commit to withdraw it."
 
-      - name: Withdraw when gate fails
+      - name: Withdraw auto-merge when not eligible
         if: steps.gate.outputs.pass != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
           gh pr edit "$PR" --remove-label "would-auto-merge" || true
-          # Belt and braces: GitHub already holds the merge because this required check is
-          # red, but disabling explicitly makes the withdrawal visible in the PR timeline.
+          # Explicitly disabling makes the withdrawal visible in the PR timeline rather
+          # than leaving a stale "auto-merge enabled" badge on a PR that no longer qualifies.
           gh pr merge "$PR" --disable-auto || true
+
+      - name: Explain a hold
+        if: steps.gate.outputs.verdict == 'hold'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR" --body \
+            "⏸️ **finn-gate: held for a human.** ${{ steps.gate.outputs.reason }}
+
+          Nothing is wrong with this PR — it just is not eligible for auto-merge. Review it and merge it yourself when you are satisfied. The check is green so it does not block you." || true
 
       - name: Report result
         run: |
-          if [ "${{ steps.gate.outputs.pass }}" != "true" ]; then
-            echo "::error::finn-gate blocked: ${{ steps.gate.outputs.reason }}"
-            exit 1
-          fi
-          echo "finn-gate passed: ${{ steps.gate.outputs.reason }}"
+          case "${{ steps.gate.outputs.verdict }}" in
+            merge)
+              echo "finn-gate: eligible for auto-merge — ${{ steps.gate.outputs.reason }}"
+              ;;
+            hold)
+              # GREEN on purpose. A hold means "a human should merge this", not "something is
+              # broken". Failing here would make every protected-path PR unmergeable once
+              # `gate` is a required check, which is most infrastructure work.
+              echo "::notice::finn-gate held for a human: ${{ steps.gate.outputs.reason }}"
+              echo "Not eligible for auto-merge, but not blocking. Merge by hand."
+              ;;
+            *)
+              echo "::error::finn-gate blocked: ${{ steps.gate.outputs.reason }}"
+              exit 1
+              ;;
+          esac
