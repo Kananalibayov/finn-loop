@@ -51,7 +51,7 @@ jobs:
           node -e '
             const fs = require("node:fs");
             const health = JSON.parse(fs.readFileSync("/tmp/health.json", "utf8"));
-            const expectedSha = `${process.env.GITHUB_SHA}-red-proof`;
+            const expectedSha = process.env.GITHUB_SHA;
             if (health.status !== "ok") throw new Error(`status=${health.status}`);
             if (health.sha !== expectedSha) throw new Error(`sha=${health.sha} expected=${expectedSha}`);
             if (!health.db || !String(health.db.path).endsWith("/app/data/app.db")) {
