@@ -174,6 +174,21 @@ two. Setting it back is an instant, total stop — no branch-protection edits ne
 - Enable "Allow auto-merge"
 - Enable "Require review from Code Owners"
 
+### Verified live, not just written
+
+Every gate was exercised against a real PR (#102) before this was documented:
+
+| Condition | Observed |
+|---|---|
+| `loop-approved` absent | `BLOCKED: loop-approved is absent` |
+| Label present, no review comment | `BLOCKED: no 'Finn-loop review of <sha>' comment found` |
+| Review comment with the correct SHA | `Reviewed SHA matches head: 6e7aefa…` — advanced past the check |
+| Diff touches protected paths | `BLOCKED: touches protected path(s): .github/CODEOWNERS .github/workflows/finn-gate.yml …` |
+| New commit lands after review | `BLOCKED: review is stale` — the race closes itself |
+
+The last row is the one that matters most. It is the only thing preventing unreviewed code
+from merging under a label that GitHub never strips.
+
 ---
 
 ## 5. Label reference
