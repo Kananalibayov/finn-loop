@@ -211,6 +211,20 @@ export default function Sidebar({
             <div className="sidebar-footer-name">{operator?.name ?? "Operator"}</div>
             <div className="sidebar-footer-role">{operator?.role ?? "admin"}</div>
           </div>
+          {/* Issue #95: POST-only logout. A plain form POST avoids the
+              forced-logout CSRF a state-changing GET /logout created.
+              SameSite=Lax on the session cookie already blocks cross-site
+              POSTs (NG-1: no CSRF token needed). */}
+          <form action="/logout" method="post">
+            <button
+              type="submit"
+              className="sidebar-logout"
+              aria-label="Log out"
+              title="Log out"
+            >
+              ⏻
+            </button>
+          </form>
         </div>
       </aside>
     </>
