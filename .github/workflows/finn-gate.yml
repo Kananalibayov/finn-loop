@@ -91,7 +91,9 @@ jobs:
           changed=$(git diff --name-only "origin/$BASE_REF...$HEAD_SHA")
           echo "Changed files:"; echo "$changed"
 
-          protected='^(lib/auth\.ts|middleware\.ts|lib/db\.ts|lib/plesk\.ts|lib/wp\.ts|lib/net\.ts|Dockerfile|docker-compose\.yml|package\.json|package-lock\.json|tsconfig\.json|next\.config\.mjs|\.github/workflows/.*|\.zcode/skills/.*|\.github/CODEOWNERS)$'
+          # Governance files are protected too: a builder that can edit ROADMAP.md could
+          # add a line and then cite it as its own authorisation in the same session.
+          protected='^(lib/auth\.ts|middleware\.ts|lib/db\.ts|lib/plesk\.ts|lib/wp\.ts|lib/net\.ts|Dockerfile|docker-compose\.yml|package\.json|package-lock\.json|tsconfig\.json|next\.config\.mjs|\.nvmrc|\.github/workflows/.*|\.zcode/skills/.*|\.github/CODEOWNERS|AGENTS\.md|ROADMAP\.md|docs/.*)$'
           if hit=$(printf '%s\n' "$changed" | grep -E "$protected" | head -3); then
             if [ -n "$hit" ]; then
               fail "touches protected path(s): $(printf '%s' "$hit" | tr '\n' ' ')"

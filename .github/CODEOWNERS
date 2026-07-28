@@ -27,6 +27,11 @@
 /.zcode/skills/             @Kananalibayov
 /AGENTS.md                  @Kananalibayov
 
+# Governance and scope. ROADMAP.md is load-bearing: once roadmap lines act as standing
+# approval, a model that can edit it can grant itself unlimited future scope.
+/ROADMAP.md                 @Kananalibayov
+/docs/                      @Kananalibayov
+
 # Build, dependency, and deploy surface
 /package.json               @Kananalibayov
 /package-lock.json          @Kananalibayov
