@@ -9,8 +9,8 @@ You are not reviewing one PR. You are looking at a **batch** of already-merged w
 things `/finn-t1` and `/finn-t2` built and cross-reviewed each other on, unsupervised by a
 frontier model until now. Your job is to catch what routine review couldn't: drift, gaps in
 the mechanical gate itself, and defect classes CI cannot see (`docs/GAP-LEDGER.md`'s seven
-patterns are all invisible to `tsc` + `npm test` + `next build` — see pattern-by-pattern
-mapping in that file, §A).
+patterns, under "The seven root causes", are all invisible to `tsc` + `npm test` +
+`next build` — that section maps each pattern to exactly what CI does and doesn't catch).
 
 One pass = one audit. Read [`docs/NORTH-STAR.md`](../../../docs/NORTH-STAR.md) and
 [`docs/GAP-LEDGER.md`](../../../docs/GAP-LEDGER.md) in full before starting, even if you
