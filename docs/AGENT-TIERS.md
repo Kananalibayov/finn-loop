@@ -640,19 +640,19 @@ files a weak model would otherwise wander into.
 | Skill | Tier | Status |
 |---|---|---|
 | `finn-spec` | **T3 only** | Must emit a Build Card for `[T1]` issues, stamp the tier in the title, and refuse to file without all nine sections |
-| **`finn-build-t1`** | **T1** | ✅ **Written** — `.zcode/skills/finn-build-t1/SKILL.md`. Refuses uncarded issues, verifies the anchor before editing, forbids exploration, captures exit codes, five-heading PR body |
-| `finn-build` | T2 | Unchanged for T2. **Do not run it on a GLM-class model** — use `finn-build-t1` |
+| **`finn-t1`** | **T1** | ✅ **Written** — `.zcode/skills/finn-t1/SKILL.md`. Refuses uncarded issues, verifies the anchor before editing, forbids exploration, captures exit codes, five-heading PR body |
+| `finn-build` | T2 | Unchanged for T2. **Do not run it on a GLM-class model** — use `finn-t1` |
 | `finn-review` | **T3 only** | Evidence gate first, then scope, then invariants, then correctness. Blocks on only the four grounds above |
 
 **Which skill to run:**
 
 ```
-T1 slot  (GLM 5.2)                  →  /finn-build-t1   (carded [T1] issues only)
+T1 slot  (GLM 5.2)                  →  /finn-t1   (carded [T1] issues only)
 T2 slot  (Sonnet 5, mid-tier)       →  /finn-build      ([T2] issues)
 T3 slots (your strongest models)    →  /finn-spec, /finn-review, T3 implementation
 ```
 
-**Stamp the tier in the issue title** — `[T1]`, `[T2]`, `[T3]`. `finn-build-t1` picks only
+**Stamp the tier in the issue title** — `[T1]`, `[T2]`, `[T3]`. `finn-t1` picks only
 `[T1]`; `finn-build` picks only `[T2]`. An unstamped issue is not pickable by any builder,
 which is the safe default.
 

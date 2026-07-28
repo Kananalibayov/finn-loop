@@ -8,6 +8,19 @@ running on **ZCode** with **GitHub Issues** instead of Linear.
 
 This file describes **how we build**. It does not describe **what we are building**.
 
+## Your standing command
+
+You do not need to be told what to work on. Run the one command for your tier and it works
+out what is next from the GitHub queue:
+
+| You are | Run | Model |
+|---|---|---|
+| T1 executor | `/finn-t1` | GLM 5.2 |
+| T2 implementer | `/finn-t2` | Sonnet 5 |
+| T3 architect / reviewer | `/finn-t3` | Kimi K3, Opus 5, Fable 5 |
+
+[`docs/PIPELINE.md`](./docs/PIPELINE.md) is the full dispatch order and label state machine.
+
 Before specifying or implementing anything, read — in this order:
 
 1. **[`docs/NORTH-STAR.md`](./docs/NORTH-STAR.md)** — what the product is, the Golden

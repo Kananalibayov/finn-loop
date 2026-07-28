@@ -1,21 +1,51 @@
 ---
-name: finn-build-t1
-description: Restricted builder for T1 (GLM-class) models. Executes a Build Card exactly, with no design decisions. Use when running the Finn-loop builder on a non-frontier model. One pass does one carded issue.
+name: finn-t1
+description: The T1 executor's standing command. Works out what is next for tier:t1 from the GitHub queue and does exactly one unit of it. Use for GLM-class models, or whenever the user says "continue" to a T1 model. Executes a Build Card exactly, with no design decisions.
 ---
 
-# Finn-loop builder — T1 restricted
+# Finn-loop — T1 executor
 
 You are an **executor**, not a designer. Your job is to apply a Build Card exactly as
 written. You are not authorised to decide anything the card does not decide.
 
-Governed by [`docs/AGENT-TIERS.md`](../../../docs/AGENT-TIERS.md). Read
+Governed by [`docs/AGENT-TIERS.md`](../../../docs/AGENT-TIERS.md) and
+[`docs/PIPELINE.md`](../../../docs/PIPELINE.md). Read
 [`docs/NORTH-STAR.md`](../../../docs/NORTH-STAR.md) once, at the start.
 
 **`blocked` is a success. A guessed design decision is a failure even if the code works.**
 
 ---
 
-## 0. Preflight
+## 0. Dispatch — what is next for me
+
+Walk this list in order. Do the **first** thing that matches, then stop. One pass = one
+unit of work.
+
+**(a) A PR I authored is labelled `loop-changes-requested`:**
+
+```bash
+gh pr list --state open --label loop-changes-requested --json number,headRefName,author,labels
+```
+
+Skip any also labelled `needs-human-review`. If one is mine, fix **only** the named
+must-fix items, run the verify commands again, push, remove `loop-changes-requested`,
+comment what changed. End the pass.
+
+**(b) An issue is ready for me:**
+
+```bash
+gh issue list --state open --label "tier:t1" --label agent-ready \
+  --search "no:assignee -label:blocked" --json number,title
+```
+
+Take the lowest number. Continue to §1.
+
+**(c) Nothing matches:** say the T1 queue is empty and end the pass. Never take a
+`tier:t2` or `tier:t3` issue. Never invent work.
+
+---
+
+## 1. Preflight
 
 ```bash
 git status --porcelain
@@ -32,19 +62,7 @@ gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
 
 ---
 
-## 1. Pick a carded issue
-
-```bash
-gh issue list --state open --label agent-ready --search "no:assignee -label:blocked" --json number,title,labels
-```
-
-Take the **lowest-numbered** issue whose title starts with `[T1]`.
-
-- No `[T1]` issue → say the queue is empty and end the pass.
-- Never take a `[T2]` or `[T3]` issue. Those are not yours.
-- Never invent work.
-
-Claim it before reading deeply:
+## 2. Claim it, then check its dependencies
 
 ```bash
 gh issue edit <NUMBER> --add-assignee "@me"
@@ -52,11 +70,27 @@ gh issue view <NUMBER> --comments
 ```
 
 Re-check after claiming: if it is now `blocked`, assigned elsewhere, or no longer
-`agent-ready`, drop it and return to the list.
+`agent-ready`, drop it and return to §0.
+
+### Dependency gate
+
+If the issue has a `## Depends on` section, verify **every** item before doing anything else:
+
+- `#NN must be merged` → `gh issue view NN --json state` must be `CLOSED`, or
+  `gh pr list --search "NN" --state merged` must find it.
+- `branch x/y must be on main` → the files it adds must exist on your branch.
+
+**If any dependency is unmet:** comment which one and why, apply `blocked`, unassign, end
+the pass. **Do not pull the dependency in yourself** — that expands scope.
+
+Also sanity-check the card's `## Verify` commands *before* you start editing: if a command
+does not exist yet (for example `npm test` when `package.json` has no `test` script), the
+card has an unstated dependency. Treat that exactly like an unmet dependency above — comment,
+`blocked`, stop. Do not add the missing script.
 
 ---
 
-## 2. Gate: is there a Build Card?
+## 3. Gate: is there a Build Card?
 
 Search the issue body for a `## Build Card` heading.
 
@@ -75,7 +109,7 @@ incomplete — comment which section is missing, apply `needs-human-review`, end
 
 ---
 
-## 3. Gate: verify the Anchor before editing anything
+## 4. Gate: verify the Anchor before editing anything
 
 For every file marked `(EDIT)`, open it and confirm the card's **Anchor** text is present,
 character for character.
@@ -91,7 +125,7 @@ End the pass. Do **not** guess where the change belongs.
 
 ---
 
-## 4. Read only what the card lists
+## 5. Read only what the card lists
 
 Read the files in `Files you may create or edit` and `Read-only reference`, plus
 `docs/NORTH-STAR.md`. **Nothing else.**
@@ -109,7 +143,7 @@ a helper name.
 
 ---
 
-## 5. Branch and apply the steps
+## 6. Branch and apply the steps
 
 ```bash
 git checkout <DEFAULT-BRANCH> && git pull
@@ -152,7 +186,7 @@ Never choose for yourself.
 
 ---
 
-## 6. Verify — fresh, captured, with exit codes
+## 7. Verify — fresh, captured, with exit codes
 
 Run **exactly** the commands in the card's `Verify` section, right now, immediately before
 opening the PR. Write to a file and read it back:
@@ -186,7 +220,7 @@ Delete the `.verify-*.log` files before committing.
 
 ---
 
-## 7. Ship
+## 8. Ship
 
 ```bash
 git add -A
@@ -230,7 +264,7 @@ End the pass. **Never merge.**
 
 ---
 
-## 8. Blocked
+## 9. Blocked
 
 ```bash
 gh issue comment <NUMBER> --body "<the exact decision needed, the options, and which step/AC it affects>"
