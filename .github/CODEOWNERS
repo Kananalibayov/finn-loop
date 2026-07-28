@@ -1,0 +1,36 @@
+# GitHub-native backstop for the highest-blast-radius files.
+#
+# This is deliberately redundant with .github/workflows/finn-gate.yml. That workflow is
+# our own code and could have a bug; CODEOWNERS is enforced by GitHub itself at merge
+# time and cannot be bypassed by a faulty workflow or a misused token.
+#
+# Requires "Require review from Code Owners" enabled in branch protection for `main`.
+#
+# Rationale: docs/AGENT-TIERS.md §8 deliberately limits the reviewer to blocking on only
+# four grounds, so a reviewer can legitimately approve code it was never scoped to
+# scrutinise. These paths are where that gap is unacceptable.
+
+# Authentication, sessions, and the request gate
+/lib/auth.ts                @Kananalibayov
+/middleware.ts              @Kananalibayov
+
+# Schema, and every outbound integration that carries credentials
+/lib/db.ts                  @Kananalibayov
+/lib/plesk.ts               @Kananalibayov
+/lib/wp.ts                  @Kananalibayov
+/lib/net.ts                 @Kananalibayov
+
+# The verifier itself. A model that can edit CI can disable its own checks.
+/.github/                   @Kananalibayov
+
+# The pipeline's own rules. A model that can edit these can rewrite its constraints.
+/.zcode/skills/             @Kananalibayov
+/AGENTS.md                  @Kananalibayov
+
+# Build, dependency, and deploy surface
+/package.json               @Kananalibayov
+/package-lock.json          @Kananalibayov
+/tsconfig.json              @Kananalibayov
+/next.config.mjs            @Kananalibayov
+/Dockerfile                 @Kananalibayov
+/docker-compose.yml         @Kananalibayov
