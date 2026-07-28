@@ -1,9 +1,12 @@
 // AC-2 (issue #63): push settings to the WP plugin's REST endpoint.
 // Operator-only. Uses the connection's stored Application Password for auth.
+// Issue #100 (GAP-LEDGER §8.1): editor-or-above — writes to the client's live
+// site (e.g. blog_public:0 silently de-indexes it from search engines).
 
 import { NextRequest, NextResponse } from "next/server";
 import { getWpConnection } from "@/lib/db";
 import { wpFetch } from "@/lib/wp";
+import { COOKIE_NAME, requireRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +15,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const session = await requireRole(req.cookies.get(COOKIE_NAME)?.value, "editor");
+  if (!session) {
+    return NextResponse.json({ error: "Editor access or above required." }, { status: 403 });
+  }
+
   const { id } = await params;
   const num = Number(id);
   if (!Number.isInteger(num) || num <= 0) {

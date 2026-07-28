@@ -116,3 +116,27 @@ export async function verifySessionRole(
     return null;
   }
 }
+
+// Issue #100 (GAP-LEDGER §8.1): shared in-handler role gate. middleware.ts only
+// checks "any valid session" — it does not distinguish operator roles, so every
+// write route must gate itself (NORTH-STAR invariant 12: isolation is enforced
+// server-side on every request, not by middleware alone).
+const OPERATOR_ROLE_RANK: Record<string, number> = { viewer: 1, editor: 2, admin: 3 };
+
+/** Returns the decoded session if it meets `minRole`, else null.
+ *  - invalid/expired token → null
+ *  - legacy `role:"admin"` session → passes any gate (retirement is §8.2, separate work)
+ *  - `role:"client"` → null (clients never pass operator gates)
+ *  - `role:"operator"` → rank(operatorRole) >= rank(minRole); unknown role → null
+ *  The returned payload lets callers attribute (operatorId) in logActivity. */
+export async function requireRole(
+  token: string | undefined | null,
+  minRole: "editor" | "admin",
+): Promise<{ role: string; clientId?: number; operatorId?: number; operatorRole?: string } | null> {
+  const session = await verifySessionRole(token);
+  if (!session) return null;
+  if (session.role === "admin") return session;
+  if (session.role !== "operator") return null;
+  const rank = OPERATOR_ROLE_RANK[session.operatorRole ?? ""] ?? 0;
+  return rank >= OPERATOR_ROLE_RANK[minRole] ? session : null;
+}
