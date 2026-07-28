@@ -1,0 +1,75 @@
+name: label-guard
+
+# Makes privileged labels unforgeable.
+#
+# Until now the label state machine was enforced only by prose in AGENTS.md ("never apply
+# agent-ready"). But every agent runs with a token that CAN apply it — so a builder could
+# label its own PR `loop-approved` and satisfy finn-gate. Every label-gated rule in this
+# repo was advisory.
+#
+# This workflow strips a privileged label applied by anyone who is not the repo owner or a
+# bot, and says so on the issue/PR. It is the prerequisite for trusting finn-gate at all.
+#
+# Deliberate design notes:
+#  - Runs on `labeled` only. Un-labeling is not privileged; removing your own approval is
+#    always safe.
+#  - Uses `github.event.sender.login`, the actor who performed the labeling — not the
+#    issue/PR author.
+#  - `github-actions[bot]` is allowed so future bot-driven flows (e.g. roadmap-approved)
+#    work without a human.
+
+on:
+  issues:
+    types: [labeled]
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: label-guard-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Strip privileged labels applied by a non-owner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          LABEL: ${{ github.event.label.name }}
+          SENDER: ${{ github.event.sender.login }}
+          OWNER: Kananalibayov
+        run: |
+          set -euo pipefail
+
+          # Labels that grant authority. Anything else is descriptive and unrestricted.
+          case "$LABEL" in
+            agent-ready|loop-approved|roadmap-approved) ;;
+            *) echo "'$LABEL' is not privileged — nothing to do."; exit 0 ;;
+          esac
+
+          # The owner may grant anything. Bots may grant anything (that is how automated
+          # roadmap approval will work). Everyone else may not.
+          if [ "$SENDER" = "$OWNER" ] || [ "$SENDER" = "github-actions[bot]" ]; then
+            echo "'$LABEL' applied by $SENDER — permitted."
+            exit 0
+          fi
+
+          echo "::warning::'$LABEL' applied by $SENDER, who is not authorised. Removing."
+
+          gh api -X DELETE "repos/$REPO/issues/$NUMBER/labels/$LABEL" >/dev/null 2>&1 || true
+
+          gh issue comment "$NUMBER" --repo "$REPO" --body \
+          "🔒 **\`$LABEL\` removed.** It was applied by \`$SENDER\`, who is not authorised to grant it.
+
+          \`agent-ready\`, \`loop-approved\` and \`roadmap-approved\` confer authority — \`loop-approved\` is what \`finn-gate\` reads to allow a merge. Only the repository owner or a bot may apply them.
+
+          If you are an agent: you are not permitted to approve your own work, and you may never apply \`agent-ready\`. See \`AGENTS.md\` and \`docs/PIPELINE.md\`." \
+            || gh api -X POST "repos/$REPO/issues/$NUMBER/comments" \
+                 -f body="🔒 \`$LABEL\` removed — applied by $SENDER, who is not authorised to grant it." >/dev/null
