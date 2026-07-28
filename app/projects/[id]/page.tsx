@@ -476,7 +476,7 @@ export default function ProjectPreviewPage() {
               Preview ready. Apply to save as a new version, or discard.
             </div>
             <div className="preview-frame-wrap" style={{ marginBottom: 8 }}>
-              <iframe title="nl-preview" className="preview-frame" srcDoc={nlPreview} style={{ height: 300 }} />
+              <iframe title="nl-preview" className="preview-frame" srcDoc={nlPreview} sandbox="" style={{ height: 300 }} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -558,6 +558,7 @@ export default function ProjectPreviewPage() {
             title="preview"
             className="preview-frame"
             srcDoc={previewDoc}
+            sandbox=""
           />
         </div>
       </section>
