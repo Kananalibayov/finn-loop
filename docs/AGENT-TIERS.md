@@ -324,6 +324,38 @@ success. A T1 pass that guesses is a failure even if the code happens to work.
    else's work.
 7. Non-goals are binding. If an acceptance criterion requires violating one, stop and say
    so — do not resolve the conflict yourself.
+8. **Every commit you make carries a `Co-Authored-By:` trailer naming your own identity**,
+   from the table below. This is not attribution — it is the *only* mechanical way another
+   pass can tell it would be reviewing its own work.
+
+### Why §4.8 exists — the gap a cron exposed
+
+`finn-t3`'s "never review a PR I authored" rule only ever worked because a model *remembered,
+in-session,* that it had just built something. But every PR in this repo is opened under the
+same GitHub account — every agent shares the human's token, so there is no PR field that says
+"built by GLM" versus "built by Kimi." A cron-triggered pass is very likely a **fresh session
+with no memory of earlier turns.** It can find a PR it built an hour ago in a different session
+and have no way to know that — and review its own unmerged work without realising it.
+
+The fix is cheap: a commit trailer is durable, survives across sessions, and is checkable with
+one `git log` command. `finn-t3` §1a now checks this **in addition to**, not instead of, the
+in-session memory check — belt and suspenders, same principle as `CODEOWNERS` alongside
+`finn-gate`.
+
+### Identity strings — use exactly these
+
+| Model | Trailer to commit |
+|---|---|
+| Claude Fable 5 | `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` |
+| Claude Opus 5 | `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>` |
+| Claude Sonnet 5 | `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>` |
+| ZCode GLM 5.2 | `Co-Authored-By: GLM 5.2 <noreply@zcode.local>` |
+| Kimi K3 (Max / Swarm) | `Co-Authored-By: Kimi K3 <noreply@moonshot.local>` |
+| GPT 5.6 (Sol / Codex) | `Co-Authored-By: GPT-5.6 <noreply@openai.local>` |
+
+If you are a model not on this list, use your real name and a placeholder email in the same
+shape — the exact domain doesn't matter, but the **name must be stable across every pass you
+run**, so a substring check (e.g. does a trailer contain `"GLM"`?) reliably finds it later.
 
 ---
 

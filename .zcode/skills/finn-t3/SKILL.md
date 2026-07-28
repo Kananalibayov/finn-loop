@@ -30,7 +30,7 @@ gh issue list --state open --json number,title,labels,assignees
 > Never self-review. If you authored it, say so and move to the next item.
 
 > **Any tier may run this step.** Review needs independence from the author, not frontier
-> capability — the four gates in §1c are mechanical. In practice Sonnet 5 reviews GLM's
+> capability — the four gates in §1d are mechanical. In practice Sonnet 5 reviews GLM's
 > `tier:t1` PRs and GLM reviews Sonnet's `tier:t2` PRs, so routine review costs nothing
 > expensive. Reserve Kimi/Opus for `tier:t3` PRs and the checkpoint audit.
 
@@ -50,10 +50,31 @@ gh issue list --state open --json number,title,labels,assignees
 
 ## 1. Review a PR
 
-### 1a. Have I already reviewed this exact commit?
+### 1a. Did I build this? Check mechanically, not just from memory
+
+**Every PR in this repo is opened under the same GitHub account** — every agent shares the
+human's token, so `gh pr view`'s author field is always the human, never "GLM" or "Kimi." If
+you are running as a fresh cron session, you have **no in-session memory** of what you built in
+an earlier session. Relying on "do I remember authoring this?" is not enough on its own.
 
 ```bash
 gh pr view <N> --json headRefOid,mergeable,mergeStateStatus,labels
+gh pr view <N> --json commits --jq '.commits[] | .messageHeadline + "\n" + .messageBody'
+```
+
+Check every commit message on the branch for a `Co-Authored-By:` trailer containing **your own
+identity string** from [`AGENT-TIERS.md`](../../../docs/AGENT-TIERS.md) §4.8 (e.g. if you are
+Kimi K3, does any trailer contain `"Kimi K3"`?). **If it matches, this is your own work — do
+not review it,** regardless of whether you also happen to remember building it. Move to the
+next item in the dispatch order.
+
+This check and the in-session memory check are both required, not either/or — a commit missing
+its trailer (an older PR, predating this rule) still needs the memory check to catch a
+same-session self-review.
+
+### 1b. Have I already reviewed this exact commit?
+
+```bash
 gh pr view <N> --comments
 ```
 
@@ -64,7 +85,7 @@ carries `loop-approved`, `loop-changes-requested`, or `needs-human-review`. Revi
 when new commits landed after the recorded SHA. Without this rule the cron re-reviews the same
 commit every five minutes forever.
 
-### 1b. Is there merge evidence to review yet?
+### 1c. Is there merge evidence to review yet?
 
 ```bash
 gh pr checks <N> --required --json bucket,name,state,link
@@ -77,7 +98,7 @@ gh pr checks <N> --required --json bucket,name,state,link
 - **No required checks configured at all** → `needs-human-review`. **Never** apply
   `loop-approved`. Missing CI is never treated as green.
 
-### 1c. The four gates
+### 1d. The four gates
 
 Order matters. Stop at the first gate that fails.
 
@@ -154,7 +175,7 @@ and never produce `loop-changes-requested`. LLM reviewers systematically overcor
 requirement conformance — a reviewer that flags conforming code is worse than no reviewer.
 Ground every finding in a re-run command, not in reading the diff.
 
-### 1d. Post the verdict — the first line is a machine contract
+### 1e. Post the verdict — the first line is a machine contract
 
 `.github/workflows/finn-gate.yml` parses the first line of your comment to decide whether the
 reviewed commit is still the current one. **The first line must be exactly
