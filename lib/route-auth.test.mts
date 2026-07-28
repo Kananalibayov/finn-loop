@@ -29,6 +29,7 @@ const AUTH_HELPERS = /\b(requireRole|requireAdmin|verifySessionRole|verifySessio
  * PUBLIC_PATHS or is guarded by its own secret/token rather than a session.
  */
 const PUBLIC_ROUTES = new Set([
+  "app/api/health/route.ts",
   "app/api/login/route.ts",
   "app/api/operators/login/route.ts",
   "app/api/portal/login/route.ts",

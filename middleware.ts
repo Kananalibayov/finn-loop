@@ -8,6 +8,7 @@ import { COOKIE_NAME, verifySessionRole } from "@/lib/auth";
 const PUBLIC_PATHS = new Set([
   "/login",
   "/logout",
+  "/api/health",
   "/api/login",
   "/api/operators/login",
   "/api/wp/pairing/register",
