@@ -35,47 +35,97 @@ and are structurally unable to drift.
 
 ## 2. The tiers
 
-Tiers are **capability bands, not vendors.** Any model in a band may do that band's work —
-they are interchangeable within a tier.
+Tiers are **roles, not vendors, and not model names.** Vendors ship new models constantly;
+this section is written so it does not go stale when they do.
 
-| Tier | Models in this band | Role | Given | Never given |
-|---|---|---|---|---|
-| **T1 — Executor** | ZCode **GLM 5.2**; comparable open-weight coding models | Applies a fully-specified change | A **Build Card** (§5): exact files, exact edits, exact commands | Goals, trade-offs, "figure out the best way", raw GitHub issues |
-| **T2 — Implementer** | **Claude Sonnet 5**; GLM 5.2 at high effort on familiar ground | Implements a spec within one bounded module | An `AC-N`/`NG-N` issue + a named file set | Schema, auth, crypto, cross-module refactors |
-| **T3 — Architect / Reviewer** | **Claude Fable 5**, **Claude Opus 5**, **ChatGPT 5.6**, **Kimi K2.5** | Designs, specs, reviews, and does dangerous work itself | Goals and constraints | — |
+Fill each slot from your roster using the placement test below. Any model in a slot may do
+that slot's work — they are interchangeable within a slot.
 
-Sonnet 5 is genuinely T3-capable for well-scoped work; it sits at T2 by default only so that
-architecture, schema and secret-handling decisions concentrate in one band. Promote a specific
-Sonnet 5 task to T3 deliberately, not by drift.
+| Slot | What it does | What it needs | Never give it |
+|---|---|---|---|
+| **T3-A — Architect** | Decides the schema, the publish/page-ownership model, the SiteModel, the credential lifecycle. Its output is a decision, not a diff | **The strongest model you have**, highest reasoning effort. Cost is irrelevant here — these decisions are made once and everything else depends on them | Nothing. This slot has no restrictions |
+| **T3-S — Spec author** | Turns a decision into a Build Card a weak model executes exactly (§5) | **The strongest model you have.** A wrong card is worse than no card — it converts a spec bug into a builder bug you pay for at review time | — |
+| **T3-R — Reviewer** | Evidence gate → scope gate → invariant gate → correctness (§8) | **Strongest available, and never the same model *or* session that built it.** Prefer a different vendor | Authority to fix what it finds. It reports; the builder fixes |
+| **T2 — Implementer** | Implements an `AC-N`/`NG-N` spec inside a named file set | A capable mid-tier model. This is where mid-tier genuinely pays — the judgment required is local | Schema, auth, crypto, cross-module refactors, contract changes |
+| **T1 — Executor** | Applies a Build Card mechanically | The cheapest model that reliably follows a card **and stops when unsure**. Coding-tuned matters far more than parameter count | Goals, trade-offs, "figure out the best way", raw GitHub issues |
 
-**T3 must do three things and may not delegate them:** author Build Cards, review every
-PR, and personally implement anything in the T3-only list (§3).
+### Placement test — how to slot any model, including ones released after this was written
 
-### Cross-model review — use the fact that you have four frontier models
+Run each check on real work from this repo. Promote or demote on what you observe, never on a
+benchmark score or a vendor's positioning.
 
-The reviewer must never be the builder's model **or** the builder's session: a 35.7%
-self-verification failure rate means the check cannot live inside the agent being checked.
-With four T3 models available, satisfy that structurally — and prefer **crossing vendors**,
-because different training lineages fail differently, so an error one model is blind to is
-more likely to be visible to another.
+| Check | If it passes |
+|---|---|
+| Given a goal and constraints, does it hold a 4–5 file change coherently and name the trade-off it chose? | **T3-A capable** |
+| Does a Build Card it authored get executed correctly, first try, by your T1 model? | **T3-S capable** |
+| On a diff with a planted bug, does it find the real bug **without** generating false must-fixes? (LLM reviewers systematically overcorrect on requirement conformance — a reviewer that flags conforming code is worse than no reviewer) | **T3-R capable** |
+| Given a spec and a named file set, does it implement it **without widening scope** or renaming things it was not asked to touch? | **T2 capable** |
+| Given a deliberately ambiguous card, does it **stop and ask** rather than guess? | **T1-safe** |
+| Does it ever claim a check it did not run? | **Not usable at any tier** until scaffolded per §7 |
+
+That last check matters most and is the one most models fail: 88% of agent trajectories
+narrate self-verification, and 35.7% of those still ship a wrong patch.
+
+### Your roster
+
+The Claude models and GLM are placed with confidence. **Models released after this was
+written cannot be reliably ranked from the outside — run the placement test rather than
+trusting any ranking, including one in this table.**
+
+| Model | Slot | Basis |
+|---|---|---|
+| **Claude Fable 5** | T3-A / T3-S / T3-R | Verified |
+| **Claude Opus 5** | T3-A / T3-S / T3-R | Verified |
+| **Claude Sonnet 5** | T2 default; T3 for well-scoped work, promoted deliberately | Verified |
+| **ZCode GLM 5.2** | T1 | Verified — it passed the stop-when-unsure check on its first real run |
+| **Kimi K3 Swarm** (vendor's top) | T3 — confirm with the placement test | Vendor tier only |
+| **GPT 5.6 Sol** (vendor's top) | T3 — confirm with the placement test | Vendor tier only |
+| Lower Kimi / GPT variants | T2 if they pass the scope check. **Not T1** without testing | Unverified |
+
+**On lower-tier variants from a strong vendor:** do not assume a smaller model from a frontier
+lab beats GLM 5.2 at T1. T1 work is mechanical instruction-following on code — exactly what
+coding-tuned models are trained for and what small general-purpose models are weakest at.
+Small-model failures concentrate in tool use and syntax (42% tool-use errors for one
+open model), which is precisely T1's job description. Test before substituting.
+
+### Cross-vendor review
+
+The reviewer must never be the builder's model **or** session — a 35.7% self-verification
+failure rate means the check cannot live inside the agent being checked. Prefer **crossing
+vendors**: different training lineages fail differently, so an error one model is blind to is
+more likely visible to another.
 
 | Built by | Review with |
 |---|---|
-| Fable 5 | Opus 5, ChatGPT 5.6, or Kimi K2.5 |
-| Opus 5 | Fable 5, ChatGPT 5.6, or Kimi K2.5 |
-| ChatGPT 5.6 | any Claude, or Kimi K2.5 |
-| Kimi K2.5 | any Claude, or ChatGPT 5.6 |
-| Sonnet 5 (T2) | any T3 model |
-| GLM 5.2 (T1) | any T3 model |
+| A Claude model | Kimi, GPT, or a *different* Claude model |
+| Kimi | Claude or GPT |
+| GPT | Claude or Kimi |
+| GLM 5.2 (T1) | any T3-slot model |
 
-Same-family review (Opus 5 reviewing Fable 5) is acceptable and still satisfies the
-different-session rule. Same-model review is not.
+Same-family, different-model review (Opus 5 reviewing Fable 5) is acceptable. Same-model
+review is not.
 
-**For the highest-risk T3 items** — the schema rebuild, the publish/slug-ownership model, the
-credential lifecycle, anything touching secrets — run **two independent T3 reviews from
-different vendors** and require both. Those are the changes where a plausible-looking wrong
-implementation writes irreversibly to a client's production WordPress or drops rows in a
-migration you cannot roll back.
+**For the highest-risk items** — the schema rebuild, the publish/slug-ownership model, the
+credential lifecycle, anything touching secrets — require **two independent T3 reviews from
+different vendors**. Those are the changes where a plausible-looking wrong implementation
+writes irreversibly to a client's production WordPress, or drops rows in a migration you
+cannot roll back.
+
+### Why tier at all — the honest tradeoff
+
+**Quality-optimal is one strong model doing everything.** A controlled coding benchmark found
+solo frontier at 97/100, and every planner+executor mix scored worse on quality, cost, or both
+once planner overhead was counted.
+
+**Tiering exists to make the unattended cron loop affordable, not to improve output.** So:
+
+- Runs **unattended on the 5-minute loop** → tier it; T1 executes carded work.
+- You are **present and iterating** → just use your strongest model. Do not tier by reflex.
+- **Architectural, security-relevant, or irreversible** → strongest model regardless of cost,
+  plus cross-vendor review.
+
+If an issue's implementation steps cannot be fully enumerated in advance, it does not belong
+at T1 or T2 at any price.
 
 ---
 
@@ -521,10 +571,9 @@ files a weak model would otherwise wander into.
 **Which skill to run:**
 
 ```
-GLM 5.2 / open-weight               →  /finn-build-t1   (carded [T1] issues only)
-Sonnet 5                            →  /finn-build      ([T2] issues)
-Fable 5 / Opus 5 / ChatGPT 5.6 /
-  Kimi K2.5                         →  /finn-spec, /finn-review, T3 implementation
+T1 slot  (GLM 5.2)                  →  /finn-build-t1   (carded [T1] issues only)
+T2 slot  (Sonnet 5, mid-tier)       →  /finn-build      ([T2] issues)
+T3 slots (your strongest models)    →  /finn-spec, /finn-review, T3 implementation
 ```
 
 **Stamp the tier in the issue title** — `[T1]`, `[T2]`, `[T3]`. `finn-build-t1` picks only
