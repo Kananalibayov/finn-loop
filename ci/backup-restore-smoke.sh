@@ -136,6 +136,23 @@ until curl -sf http://localhost:3000/api/health >/dev/null 2>&1; do
   sleep 2
 done
 
+# --- Step 2b: bootstrap the schema via the real app path --------------------
+# /api/health uses a direct better-sqlite3 connection and deliberately does NOT
+# trigger lib/db's lazy schema creation (issue #103/#117 design). So a fresh
+# volume has an empty app.db with no `sites` table, and the direct marker
+# insert below would fail with "no such table: sites" (review feedback #138).
+# Hitting POST /api/operators/login with the throwaway admin password calls
+# getAppSettings() → db() → CREATE TABLE IF NOT EXISTS for every table. This
+# exercises the app's real schema-init path, not a synthetic one.
+echo "SMOKE bootstrapping schema via POST /api/operators/login"
+LOGIN_HTTP="$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/api/operators/login \
+  -H "Content-Type: application/json" \
+  -d '{"password":"ci-throwaway-backup"}')"
+if [ "$LOGIN_HTTP" != "200" ]; then
+  echo "FAIL: schema-bootstrap login returned HTTP ${LOGIN_HTTP} (expected 200)" >&2
+  exit 1
+fi
+
 # --- Step 3-4: insert marker + record source row count ----------------------
 echo "SMOKE inserting marker row + recording source count"
 docker compose -p "$PROJECT_NAME" -f "$SMOKE_COMPOSE" exec -T app node -e "$INSERT_MARKER_JS"
