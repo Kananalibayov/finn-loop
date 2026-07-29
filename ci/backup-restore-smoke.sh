@@ -35,8 +35,15 @@ HOST_BACKUP_DIR="${THROWAWAY_DIR}/backups"
 SMOKE_COMPOSE="${THROWAWAY_DIR}/docker-compose.smoke.yml"
 
 # Throwaway, non-secret credentials. Never reuse anywhere real.
-ADMIN_HASH="$(node -e "console.log(require('bcryptjs').hashSync('ci-throwaway-backup', 10))")"
-SESSION_SECRET="ci-throwaway-session-secret-0123456789abcdef"
+# NOTE: bcrypt hashes contain `$` (e.g. `$2b$10$...`). If interpolated directly
+# into the Compose YAML as `ADMIN_PASSWORD_HASH: $2b$10$...`, Compose treats
+# `$2b`, `$10`, etc. as variable refs and silently empties them → login 401.
+# The fix (matching .github/workflows/docker-smoke.yml) is to EXPORT the value
+# and reference it as `${ADMIN_PASSWORD_HASH}` in the compose file with the
+# whole value quoted, so Compose resolves it from the environment verbatim
+# rather than re-interpolating the literal `$`s in the YAML.
+export ADMIN_PASSWORD_HASH="$(node -e "console.log(require('bcryptjs').hashSync('ci-throwaway-backup', 10))")"
+export ADMIN_SESSION_SECRET="ci-throwaway-session-secret-0123456789abcdef"
 MARKER_NAME="__BACKUP_RESTORE_PROBE__"
 
 mkdir -p "$THROWAWAY_DIR" "$HOST_BACKUP_DIR"
@@ -91,8 +98,10 @@ services:
     image: backup-restore-test:latest
     container_name: ${PROJECT_NAME}-app
     environment:
-      ADMIN_PASSWORD_HASH: ${ADMIN_HASH}
-      ADMIN_SESSION_SECRET: ${SESSION_SECRET}
+      # Quoted + referenced from the exported environment so the literal `$`s
+      # in the bcrypt hash are NOT re-interpolated by Compose.
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH}"
+      ADMIN_SESSION_SECRET: "${ADMIN_SESSION_SECRET}"
       OPENAI_API_KEY: sk-ci-throwaway
       OPENAI_BASE_URL: http://openai-mock:4010/v1
       DATABASE_FILE: /app/data/app.db
