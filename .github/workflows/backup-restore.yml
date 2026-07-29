@@ -1,0 +1,50 @@
+# .github/workflows/backup-restore.yml
+# Nightly + manual-dispatch proof that the documented backup procedure produces
+# a restorable database. Uses throwaway data only — never reads production
+# secrets, never touches a production volume.
+#
+# Issue #131: replaces the previous success-shaped `cp` (DEPLOY.md) with an
+# observed online backup and a round-trip restore assertion.
+
+name: Backup Restore
+
+on:
+  schedule:
+    # 05:17 UTC daily — off the top of the hour to dodge GitHub's cron rush.
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Do not cancel an in-progress restore test — a half-torn-down Docker stack
+  # is worse than a queued run. Allow only one run at a time; queue the rest.
+  group: backup-restore
+  cancel-in-progress: false
+
+jobs:
+  backup-restore-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install deps (for bcryptjs hash used by the smoke)
+        run: npm ci --ignore-scripts
+
+      - name: Run backup-restore smoke
+        run: bash ci/backup-restore-smoke.sh
+
+      - name: Show markers
+        if: always()
+        run: |
+          echo "--- smoke markers (look for SOURCE_ROWS / RESTORED_ROWS / RESTORE_VERIFIED=1) ---"
+          # The smoke script prints these to stdout; this step is a convenience
+          # surface for reading the job log at a glance.
+          true
