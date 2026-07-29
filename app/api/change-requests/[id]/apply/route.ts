@@ -97,7 +97,18 @@ export async function POST(
   });
 
   // Mark the request completed.
-  resolveChangeRequest(num, "completed", `Applied as project #${newProjectId}`);
+  const resolved = resolveChangeRequest(
+    num,
+    "completed",
+    `Applied as project #${newProjectId}`,
+    ["pending", "approved"],
+  );
+  if (!resolved) {
+    return NextResponse.json(
+      { error: "Request is no longer in a state that allows this transition." },
+      { status: 409 },
+    );
+  }
 
   // Notify client (best-effort).
   const { getClientById } = await import("@/lib/db");
