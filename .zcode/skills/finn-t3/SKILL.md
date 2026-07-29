@@ -18,21 +18,30 @@ One pass = one unit of work. **You never merge** — the human merges `loop-appr
 
 ## 0. Dispatch — what is next
 
-First match wins. Then stop.
+Step (a) is **not** one-and-done: drain it completely, then continue down the list. Steps
+(b)–(e) are first-match-wins.
 
 ```bash
 gh pr list --state open --json number,title,author,labels,headRefName
 gh issue list --state open --json number,title,labels,assignees
 ```
 
-**(a) A PR is `loop-review-requested` and I am NOT its author** → review it (§1). End.
+**(a) EVERY open PR that is `loop-review-requested` and that I did NOT author** → review each
+one (§1), posting a separate verdict per PR. Do not stop after the first. Only when no
+un-reviewed PR remains do you move to (b).
 
-> Never self-review. If you authored it, say so and move to the next item.
+> **Why "every", not "the first".** This step used to stop after one PR, and the result was a
+> review queue that grew faster than it drained — PRs sat for hours waiting for a human to
+> notice and trigger another pass. When this skill runs on a timer, draining the queue is the
+> whole point. Reviewing five PRs in one pass costs barely more than one, because the
+> expensive part (fetch, install, warm context) is paid once.
 
-> **Any tier may run this step.** Review needs independence from the author, not frontier
-> capability — the four gates in §1d are mechanical. In practice Sonnet 5 reviews GLM's
-> `tier:t1` PRs and GLM reviews Sonnet's `tier:t2` PRs, so routine review costs nothing
-> expensive. Reserve Kimi/Opus for `tier:t3` PRs and the checkpoint audit.
+> Never self-review. Check each PR's commit `Co-Authored-By` trailers against your own
+> identity per §1a. If it is yours, say so and skip it — do not let that end the pass; keep
+> going through the rest.
+
+> **Any model may run this step.** Review needs independence from the author, not frontier
+> capability — the four gates in §1d are mechanical.
 
 **(b) An issue is `blocked` and the answer is architectural rather than a product decision**
 → resolve it: re-card, amend the file set, or correct the spec. Remove `blocked`. End.
@@ -40,9 +49,12 @@ gh issue list --state open --json number,title,labels,assignees
 > If it needs a *product* decision — pricing, scope, what the business wants — leave it and
 > tell the human what to decide. That is not yours.
 
-**(c) An issue is `tier:t3` + `agent-ready` + unassigned** → implement it (§2). End.
+**(c) An issue is `agent-ready`, unassigned, and its `## Files In Scope` touches a path no
+builder may take** (`lib/auth.ts`, `middleware.ts`, `.github/workflows/`, `.zcode/skills/`,
+`.github/CODEOWNERS`, `AGENTS.md`, `ROADMAP.md`, or a rule doc) **or it carries
+`needs-approval`** → implement it yourself (§2). End.
 
-**(d) Fewer than 3 issues are `agent-ready` across all tiers** → refill the backlog (§3). End.
+**(d) Fewer than 5 issues are `agent-ready`** → refill the backlog (§3). End.
 
 **(e) Nothing matches** → report the queue state in one short table and end.
 
@@ -274,11 +286,28 @@ you too.
 
 ## 3. Refill the spec backlog
 
-Read [`../../../ROADMAP.md`](../../../ROADMAP.md). Find the **earliest unchecked item in the
-earliest incomplete phase.** Do not skip ahead — phases are ordered because each is a
-prerequisite for the next being verifiable.
+Read [`../../../ROADMAP.md`](../../../ROADMAP.md), then **card enough items to bring the
+`agent-ready` count to 5.** Multiple issues per pass, not one — a timed loop that adds one spec
+per pass cannot keep a builder fed.
 
-Write **one** issue for it, sized to ≤ 1 day. Use the nine-section shape from
+**You decide the order.** Prefer the earliest incomplete phase, but you may reorder *within
+and across* phases when your own reading of `NORTH-STAR.md`, `GAP-LEDGER.md` and
+`STATE-OF-THE-BUILD.md` says something else unblocks more downstream work or matters more now.
+Prefer items that unblock others over items that stand alone. Two hard limits:
+
+1. **You decide ordering, never scope.** Every issue must verbatim-cite a real *unchecked*
+   `ROADMAP.md` line (below), because `roadmap-approve.yml` is the mechanical authorisation
+   gate and it is the only reason a self-refilling queue is safe. Never widen the roadmap to
+   create work for yourself — `ROADMAP.md` is a protected path precisely so you cannot add a
+   line and then cite it next pass.
+2. **Phase 0.75 is strictly ordered — never reorder it.** `ROADMAP.md` marks it *"strict order,
+   do not reorder"* because the `client_id` sequence detonates roughly 35 latent defects if
+   built out of sequence. Card its items in the listed order or not at all.
+
+Also respect `## Depends on`: do not card an item whose prerequisite is neither merged nor
+already queued ahead of it.
+
+For each item write one issue, sized to ≤ 1 day. Use the nine-section shape from
 [`AGENT-TIERS.md`](../../../docs/AGENT-TIERS.md) §5:
 
 1. Golden Path step served

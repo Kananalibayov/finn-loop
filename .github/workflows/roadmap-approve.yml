@@ -1,10 +1,10 @@
 name: roadmap-approve
 
-# Auto-approves a NEW tier:t1/tier:t2 issue for building, IF it verbatim-quotes an
-# unchecked line that is currently on ROADMAP.md's main. This is the one part of the
-# approval gate that can be automated safely, because it is not a judgment call — it is
-# a mechanical check that the work was already committed to by the human (merging the
-# PR that put that line on ROADMAP.md in the first place).
+# Auto-approves a NEW issue for building, IF it verbatim-quotes an unchecked line that is
+# currently on ROADMAP.md's main. This is the one part of the approval gate that can be
+# automated safely, because it is not a judgment call — it is a mechanical check that the
+# work was already committed to by the human (merging the PR that put that line on
+# ROADMAP.md in the first place).
 #
 # Why this is real enforcement, unlike label-guard: every agent in this project
 # authenticates as the repo owner, so label-guard cannot distinguish an agent applying
@@ -12,9 +12,15 @@ name: roadmap-approve
 # default GITHUB_TOKEN, an identity no agent's token can assume - so an agent citing a
 # line that ISN'T on the roadmap gets nothing, no matter how it asks.
 #
-# tier:t3 issues are never touched here. That tier is deliberately the human-gated one -
-# schema, auth, secrets, credential lifecycle - and this workflow does not even inspect
-# them.
+# It is also what makes a self-refilling queue safe: the spec author decides what to build
+# NEXT, but can never decide WHAT EXISTS to build, because ROADMAP.md is a protected path it
+# cannot merge a change to.
+#
+# Two things are still never auto-approved (see the inline notes at the eligibility check):
+# an issue labelled needs-approval, and an issue whose Files In Scope touches the pipeline's
+# own rulebook or the auth boundary. The old tier:t1/tier:t2 gate is gone - tier labels were
+# LLM-assigned and repeatedly wrong, while the diff-based path check is what actually protects
+# anything.
 
 on:
   issues:
@@ -54,16 +60,78 @@ jobs:
 
             const labelNames = issue.labels.map(l => (typeof l === 'string' ? l : l.name));
 
-            // Only tier:t1 / tier:t2, and only if not already approved. tier:t3 is
-            // deliberately never inspected here - that tier is the human-gated one.
-            const isEligibleTier = labelNames.includes('tier:t1') || labelNames.includes('tier:t2');
             const alreadyApproved = labelNames.includes('agent-ready');
-            if (!isEligibleTier || alreadyApproved) {
-              console.log(`Skipping #${issue_number}: eligible=${isEligibleTier}, alreadyApproved=${alreadyApproved}`);
+            if (alreadyApproved) {
+              console.log(`Skipping #${issue_number}: already agent-ready.`);
               return;
             }
 
             const body = issue.body || '';
+
+            // The tier:t1/tier:t2 gate that used to live here is gone. tier:tN was assigned by
+            // an LLM at spec time and kept being wrong (two issues had to be re-tiered by hand;
+            // a good PR was escalated purely because a "t1 model" built a "t2 issue"), while the
+            // thing that actually protects anything is the diff-based path check in
+            // finn-gate.yml. docs/AGENT-TIERS.md said so outright: "the tier label never was
+            // the real gate."
+            //
+            // Two replacements, both mechanical rather than model-assigned:
+            //
+            //  1. needs-approval - an explicit opt-out the spec author sets when the work is
+            //     dangerous in a way no path list can see. Crypto and secret-generation is the
+            //     motivating case: an issue replacing Math.random() for credential generation
+            //     touches only lib/db.ts and lib/plesk.ts, both freely auto-mergeable paths, yet
+            //     is exactly the work that must not be approved without a human. This is
+            //     self-assessed, so it is backed by finn-gate's dangerous-content scan at merge.
+            //
+            //  2. The Files In Scope path check below - work on the pipeline's own rulebook or
+            //     the auth boundary is never auto-approved, mirroring finn-gate's hold list so
+            //     one concept is enforced at both approval time and merge time.
+            if (labelNames.includes('needs-approval')) {
+              console.log(`Skipping #${issue_number}: carries needs-approval - human decides.`);
+              return;
+            }
+
+            // Mirrors the Tier A list in .github/workflows/finn-gate.yml. Keep them in step:
+            // if a path is added there it belongs here too, or an agent could get a spec
+            // auto-approved for work it will then be unable to merge.
+            //
+            // Deliberately unanchored substring matches. An earlier version anchored these with
+            // `$` and silently FAILED to block a spec listing "- `lib/auth.ts` (EDIT)", because
+            // the path is followed by a backtick and an annotation rather than end-of-line -
+            // it read as auto-approvable. Over-blocking here is harmless (the human just adds
+            // agent-ready by hand); under-blocking hands an agent the auth boundary. So this
+            // errs toward matching too much, on purpose.
+            const TIER_A = [
+              /lib\/auth\.ts/,
+              /middleware\.ts/,
+              /\.github\/workflows\//,
+              /\.zcode\/skills\//,
+              /CODEOWNERS/,
+              /AGENTS\.md/,
+              /ROADMAP\.md/,
+              /docs\/(NORTH-STAR|AGENT-TIERS|PIPELINE|GAP-LEDGER|PRODUCT-VISION)\.md/,
+            ];
+            const scopeMatch = body.match(/##\s*Files In Scope\s*\n([\s\S]*?)(?=\n##\s|\s*$)/i);
+            const scopeText = scopeMatch ? scopeMatch[1] : '';
+            const tierAHit = TIER_A.find(re => re.test(scopeText));
+            if (tierAHit) {
+              console.log(`Skipping #${issue_number}: Files In Scope touches a protected path (${tierAHit}).`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body:
+                  '🔒 **`roadmap-approve`: not auto-approving.**\n\n' +
+                  'This spec\'s `## Files In Scope` touches a protected path — the pipeline\'s own ' +
+                  'rulebook (workflows, skills, CODEOWNERS, `AGENTS.md`, `ROADMAP.md`, a rule doc) ' +
+                  'or the auth/session boundary (`lib/auth.ts`, `middleware.ts`).\n\n' +
+                  'Those are the two categories where an agent could either rewrite its own ' +
+                  'oversight or introduce a silent security hole, so they need a human to approve ' +
+                  'and a human to merge. Add `agent-ready` yourself if you want this built.',
+              });
+              return;
+            }
 
             // The issue must contain a "## Cites ROADMAP.md line" section with a
             // blockquoted line. Absence of this section is the NORMAL case for most
