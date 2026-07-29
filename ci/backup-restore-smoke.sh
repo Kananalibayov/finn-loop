@@ -98,7 +98,7 @@ services:
     image: backup-restore-test:latest
     container_name: ${PROJECT_NAME}-app
     environment:
-      # Quoted + referenced from the exported environment so the literal `$`s
+      # Quoted + referenced from the exported environment so the literal dollar signs
       # in the bcrypt hash are NOT re-interpolated by Compose.
       ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH}"
       ADMIN_SESSION_SECRET: "${ADMIN_SESSION_SECRET}"
