@@ -52,6 +52,7 @@ export default function OperatorsPage() {
   }
 
   async function handleDelete(id: number) {
+    if (!window.confirm("Delete this operator? This cannot be undone.")) return;
     setDeletingId(id);
     setError(null);
     try {

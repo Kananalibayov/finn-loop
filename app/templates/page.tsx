@@ -84,6 +84,7 @@ export default function TemplatesPage() {
   }
 
   async function handleDelete(t: Template) {
+    if (!window.confirm("Delete this template? This cannot be undone.")) return;
     setDeletingId(t.id);
     setFormError(null);
     try {
