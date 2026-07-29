@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateTemplateFromUrl } from "@/lib/template-from-url";
 import { insertTemplate } from "@/lib/db";
+import { UnsafeTargetError } from "@/lib/net";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,9 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const msg = (e as Error).message || "Scan failed.";
     console.error("[from-scan] failed:", msg);
+    if (e instanceof UnsafeTargetError) {
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
     // Distinguish validation errors (400) from upstream/fetch/parse errors (502).
     const isValidation = /Invalid URL|must be http/i.test(msg);
     return NextResponse.json(

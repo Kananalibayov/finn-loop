@@ -3,8 +3,8 @@
 // sends the structural excerpt to gpt-4o (text-in → template-JSON-out, same
 // JSON contract as #52), and reuses parseTemplateJson for validation.
 
-import { getOpenAI } from "@/lib/openai";
-import { parseTemplateJson, type GeneratedTemplateContent } from "@/lib/template-from-image";
+import type { GeneratedTemplateContent } from "./template-from-image.ts";
+import { assertPublicHttpTarget } from "./net.ts";
 
 // Re-export so callers can import everything from one place.
 export type { GeneratedTemplateContent };
@@ -60,7 +60,7 @@ export const URL_USER_PROMPT = (url: string, html: string) =>
   `Here is the HTML source of ${url} (scripts and styles stripped for focus; class names and link hrefs preserved):\n\n${html}\n\nProduce the template JSON per the system instructions.`;
 
 /** AC-1: fetch the URL's HTML with constraints. Throws clearly on any failure. */
-async function fetchHtml(url: string): Promise<string> {
+export async function fetchHtml(url: string): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -72,6 +72,7 @@ async function fetchHtml(url: string): Promise<string> {
     // Manual redirect loop to enforce MAX_REDIRECTS (fetch's `redirect: "follow"`
     // has no built-in cap and some sites redirect-loop).
     while (true) {
+      await assertPublicHttpTarget(currentUrl);
       res = await fetch(currentUrl, {
         signal: controller.signal,
         redirect: "manual",
@@ -151,16 +152,7 @@ function stripHeavyContent(html: string): string {
 
 /** AC-1: fetch + analyze a URL into a template. Reuses parseTemplateJson. */
 export async function generateTemplateFromUrl(url: string): Promise<GeneratedTemplateContent> {
-  // Validate URL.
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(url);
-  } catch {
-    throw new Error("Invalid URL. Must include the scheme (e.g. https://example.com).");
-  }
-  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-    throw new Error("URL must be http or https.");
-  }
+  const parsedUrl = await assertPublicHttpTarget(url);
 
   const rawHtml = await fetchHtml(parsedUrl.toString());
   const stripped = stripHeavyContent(rawHtml);
@@ -171,6 +163,10 @@ export async function generateTemplateFromUrl(url: string): Promise<GeneratedTem
     );
   }
 
+  const [{ getOpenAI }, { parseTemplateJson }] = await Promise.all([
+    import("./openai.ts"),
+    import("./template-from-image.ts"),
+  ]);
   const client = getOpenAI();
   const res = await client.chat.completions.create({
     model: ANALYSIS_MODEL,
