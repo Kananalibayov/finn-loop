@@ -1,0 +1,118 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { DesignTokens, SiteModel } from "../site-model.ts";
+import { sectionInstanceId } from "../sections/registry.ts";
+import { renderHtml } from "./render-html.ts";
+import { themeJson } from "./theme-json.ts";
+import { tokensToCss } from "./tokens-css.ts";
+
+const tokens: DesignTokens = {
+  color: {
+    primary: "#123456",
+    accent: "#abcdef",
+    bg: "#ffffff",
+    surface: "#f5f5f5",
+    text: "#111111",
+    muted: "#666666",
+    border: "#dddddd",
+  },
+  font: { heading: "Inter", body: "Arial" },
+  typeScale: "1.25",
+  spacingUnit: "8px",
+  radius: "4px",
+  shadow: "0 1px 2px #0003",
+  containerMax: "1200px",
+};
+
+function modelWithPages(): SiteModel {
+  const page = (slug: string, count = 1) => ({
+    slug,
+    title: slug,
+    seo: { title: `${slug} <title>`, description: `${slug} & description`, schema: [] },
+    sections: Array.from({ length: count }, (_, index) => ({
+      type: "hero" as const,
+      variant: index % 2 === 0 ? "split" : "centered",
+      content: { heading: `Heading ${index}` },
+    })),
+  });
+  return {
+    version: 1,
+    brand: { tokens, voice: { tone: "clear" } },
+    meta: { businessName: "Example", contact: {}, hours: [], social: {}, locations: [] },
+    nav: [],
+    pages: [page("home", 2), page("about")],
+  };
+}
+
+test("tokensToCss emits every deterministic custom property", () => {
+  const css = tokensToCss(tokens);
+  for (const name of [
+    "--color-primary", "--color-accent", "--color-bg", "--color-surface", "--color-text",
+    "--color-muted", "--color-border", "--font-heading", "--font-body", "--type-scale",
+    "--spacing-unit", "--radius", "--shadow", "--container-max",
+  ]) assert.match(css, new RegExp(`${name}:`));
+  assert.match(css, /--color-primary: #123456;/);
+});
+
+test("themeJson exposes WordPress v2 palette and font families", () => {
+  const result = themeJson(tokens) as { version: number; settings: { color: { palette: Array<{ color: string }> }; typography: { fontFamilies: unknown[] } } };
+  assert.equal(result.version, 2);
+  assert.equal(result.settings.color.palette.some((entry) => entry.color === tokens.color.primary), true);
+  assert.equal(result.settings.typography.fontFamilies.length, 2);
+});
+
+test("renderHtml preserves page order and emits one external stylesheet per page", () => {
+  const result = renderHtml(modelWithPages());
+  assert.deepEqual(result.pages.map((page) => page.slug), ["home", "about"]);
+  assert.equal(result.pages.length, 2);
+  for (const page of result.pages) {
+    assert.equal((page.html.match(/<link rel="stylesheet" href="\/style\.css">/g) ?? []).length, 1);
+    assert.equal(page.html.includes("<style"), false);
+    assert.equal(page.html.includes('style="'), false);
+  }
+});
+
+test("renderHtml includes indexed section instance ids", () => {
+  const html = renderHtml(modelWithPages()).pages[0].html;
+  assert.match(html, new RegExp(`data-section-instance="${sectionInstanceId("hero", "split", 0)}"`));
+  assert.match(html, new RegExp(`data-section-instance="${sectionInstanceId("hero", "centered", 1)}"`));
+});
+
+test("renderHtml throws for an unknown renderer", () => {
+  const model = modelWithPages();
+  model.pages[0].sections[0].variant = "nonexistent";
+  assert.throws(() => renderHtml(model), /hero.*nonexistent/);
+});
+
+test("renderHtml rejects invalid models at the boundary", () => {
+  assert.throws(() => renderHtml(null as never), (error: unknown) => error instanceof TypeError && /model/i.test(String(error)));
+  assert.throws(() => renderHtml({} as never), (error: unknown) => error instanceof TypeError && /model/i.test(String(error)));
+});
+
+test("renderHtml is deterministic and escapes head content", () => {
+  const model = modelWithPages();
+  const first = renderHtml(model);
+  const second = renderHtml(model);
+  assert.deepEqual(first, second);
+  assert.match(first.pages[0].html, /<title>home &lt;title&gt;<\/title>/);
+  assert.match(first.pages[0].html, /content="home &amp; description"/);
+});
+
+test("renderHtml output has required document metadata", () => {
+  const html = renderHtml(modelWithPages()).pages[0].html;
+  assert.match(html, /^<!doctype html><html lang="en"><head>/);
+  assert.match(html, /<meta charset="utf-8">/);
+  assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
+});
+
+test("tokensToCss preserves the declared property order", () => {
+  const css = tokensToCss(tokens);
+  assert.ok(css.indexOf("--color-primary") < css.indexOf("--font-heading"));
+  assert.ok(css.indexOf("--font-body") < css.indexOf("--container-max"));
+});
+
+test("renderHtml returns the shared stylesheet and theme data", () => {
+  const result = renderHtml(modelWithPages());
+  assert.equal(result.stylesheet, tokensToCss(tokens));
+  assert.deepEqual(result.themeJson, themeJson(tokens));
+});
