@@ -35,3 +35,25 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  lint:
+    # Separate from `build` deliberately: eslint-suppressions.json baselines the
+    # ~68 pre-existing violations (mostly GAP-LEDGER pattern 1 catch blocks) so
+    # this job is green today, but `build` (finn-gate's only required check) must
+    # stay unaffected either way while that baseline is worked down (issue #109 is
+    # the detector; remediation is separate — NG-2).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
