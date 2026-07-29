@@ -46,6 +46,23 @@ export function verifyPasswordAgainstHash(
   return false;
 }
 
+/** Issue #136 (GAP-LEDGER §8.2): resolve which legacy-admin hashes may
+ *  authenticate, under the retirement policy. A non-empty DB hash is the sole
+ *  candidate — storing one is the durable retirement marker for the
+ *  environment credential. With no DB hash, the environment hash is eligible
+ *  only during the bootstrap window (zero operators); once any operator
+ *  exists, the legacy env credential is dead. Pure and Edge-Runtime-safe: the
+ *  caller reads the DB/env and passes values in; nothing is imported here. */
+export function legacyAdminCandidateHashes(
+  dbHash: string | null | undefined,
+  envHash: string | null | undefined,
+  operatorCount: number,
+): Array<string> {
+  if (dbHash) return [dbHash];
+  if (operatorCount === 0 && envHash) return [envHash];
+  return [];
+}
+
 /** AC-6 (issue #46): hash a plaintext password for storage. The caller writes
  *  it to the DB (or env). Kept here so the bcrypt cost factor is centralized. */
 export function hashPassword(plaintext: string): string {

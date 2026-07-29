@@ -3,8 +3,14 @@
 // Operator-only (behind middleware). newPassword must be >= 8 chars.
 
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPasswordAgainstHash, hashPassword, COOKIE_NAME, requireRole } from "@/lib/auth";
-import { getAppSettings, saveAppSettings } from "@/lib/db";
+import {
+  legacyAdminCandidateHashes,
+  verifyPasswordAgainstHash,
+  hashPassword,
+  COOKIE_NAME,
+  requireRole,
+} from "@/lib/auth";
+import { getAppSettings, listOperators, saveAppSettings } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,10 +37,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "currentPassword is required." }, { status: 400 });
   }
 
-  // AC-6 (issue #46): verify against DB override first, env fallback.
+  // Issue #136 (GAP-LEDGER §8.2): a stored DB hash is the sole candidate; the
+  // env hash is accepted only during the zero-operator bootstrap window.
   const dbHash = getAppSettings()?.admin_password_hash ?? null;
   const envHash = process.env.ADMIN_PASSWORD_HASH ?? null;
-  if (!verifyPasswordAgainstHash(currentPassword, [dbHash, envHash])) {
+  const candidates = legacyAdminCandidateHashes(dbHash, envHash, listOperators().length);
+  if (!verifyPasswordAgainstHash(currentPassword, candidates)) {
     return NextResponse.json({ error: "Current password is incorrect." }, { status: 401 });
   }
 
@@ -45,7 +53,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Hash + store in the DB (env hash left as a fallback if DB is later cleared).
+  // Hash + store in the DB. Storing the DB hash is the durable retirement
+  // marker (issue #136): from this point on the environment credential is no
+  // longer accepted anywhere — there is no env fallback left to clear.
   saveAppSettings({ adminPasswordHash: hashPassword(newPassword) });
   return NextResponse.json({ ok: true });
 }
