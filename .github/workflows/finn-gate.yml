@@ -84,17 +84,17 @@ jobs:
           fi
           echo "Reviewed SHA matches head: $HEAD_SHA"
 
-          # ---- 3. Linked issue must not be tier:t3 -----------------------------
-          # Secondary signal only. tier:tN is LLM-assigned at spec time, so the
-          # diff-based checks below are the primary backstop.
+          # ---- 3. Linked issue tier (informational only) -----------------------
+          # tier:t3 no longer forces a hold here — the user has explicitly opted
+          # into full autonomy for GPT-5.6/Kimi-reviewed PRs, tier:t3 included,
+          # until told otherwise. The diff-based checks below (protected paths,
+          # dangerous content, the client_id landmine) remain the real backstop
+          # regardless of tier.
           body=$(gh pr view "$PR" --json body --jq .body)
           issue=$(printf '%s' "$body" | grep -oiE 'closes #[0-9]+' | head -1 | grep -oE '[0-9]+' || true)
           if [ -n "$issue" ]; then
             itiers=$(gh issue view "$issue" --json labels --jq '[.labels[].name] | join(",")' || echo "")
             echo "Linked issue #$issue labels: $itiers"
-            case ",$itiers," in
-              *,tier:t3,*) hold "linked issue #$issue is tier:t3 — never auto-merges" ;;
-            esac
           else
             echo "No linked issue found in PR body (not fatal for this gate)"
           fi
@@ -104,9 +104,21 @@ jobs:
           changed=$(git diff --name-only "origin/$BASE_REF...$HEAD_SHA")
           echo "Changed files:"; echo "$changed"
 
-          # Governance files are protected too: a builder that can edit ROADMAP.md could
-          # add a line and then cite it as its own authorisation in the same session.
-          protected='^(lib/auth\.ts|middleware\.ts|lib/db\.ts|lib/plesk\.ts|lib/wp\.ts|lib/net\.ts|Dockerfile|docker-compose\.yml|package\.json|package-lock\.json|tsconfig\.json|next\.config\.mjs|\.nvmrc|\.github/workflows/.*|\.zcode/skills/.*|\.github/CODEOWNERS|AGENTS\.md|ROADMAP\.md|docs/.*)$'
+          # Tier A only — always held for a human, deliberately, in two categories:
+          #  - Self-referential governance (.github/workflows, .zcode/skills, CODEOWNERS,
+          #    AGENTS.md, ROADMAP.md, docs/**): the pipeline's own rulebook. Auto-merging
+          #    changes here would let an agent rewrite its own oversight with nobody ever
+          #    seeing it — e.g. roadmap-approve.yml auto-grants agent-ready to any issue that
+          #    verbatim-cites an unchecked ROADMAP.md line, so an unprotected ROADMAP.md would
+          #    let an agent add a line and self-cite it next pass.
+          #  - The auth/session security boundary (lib/auth.ts, middleware.ts): a subtly wrong
+          #    change here is a silent live vulnerability, not a visible bug.
+          # Everything else the pipeline used to hold on (lib/db.ts, lib/net.ts, lib/plesk.ts,
+          # lib/wp.ts, Dockerfile, docker-compose.yml, package.json, tsconfig.json,
+          # next.config.mjs, .nvmrc, app/** code) is real but bounded/revertible risk — those
+          # now auto-merge fully once independently reviewed and CI is green, per explicit user
+          # request for full tier:t3 automation.
+          protected='^(lib/auth\.ts|middleware\.ts|\.github/workflows/.*|\.zcode/skills/.*|\.github/CODEOWNERS|AGENTS\.md|ROADMAP\.md|docs/.*)$'
           if hit=$(printf '%s\n' "$changed" | grep -E "$protected" | head -3); then
             if [ -n "$hit" ]; then
               hold "touches protected path(s): $(printf '%s' "$hit" | tr '\n' ' ')"

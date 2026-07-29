@@ -50,12 +50,14 @@ ZCodeProject/
 - ✅ Repo created: `Kananalibayov/finn-loop` (private)
 - ✅ Labels created, including `tier:t1` / `tier:t2` / `tier:t3`
 - ✅ `.github/workflows/finn-gate.yml` — the mechanical merge gate
-- ✅ `.github/CODEOWNERS` — owner review required on protected paths
+- ✅ `.github/CODEOWNERS` — owner review required on Tier A protected paths only (see
+      [`docs/PIPELINE.md`](./docs/PIPELINE.md) §4a for the Tier A/Tier B split — Tier B is
+      full-automation-eligible per explicit user request)
 - ⬜ Three ZCode cron automations (one per tier, each in its own worktree) — see
       [`docs/PIPELINE.md`](./docs/PIPELINE.md) §6
-- ⬜ Branch protection: require `build` **and** `finn-gate`; enable "Allow auto-merge";
-      enable "Require review from Code Owners"
-- ⬜ Repo variable `FINN_AUTOMERGE` — leave unset (dry run) until the gate is trusted
+- ✅ Branch protection: requires `build` **and** `finn-gate`; "Allow auto-merge" enabled;
+      "Require review from Code Owners" enabled (Tier A paths only)
+- ✅ Repo variable `FINN_AUTOMERGE=on`
 
 There is **no reviewer automation to register.** Review is dispatch step (a) of `/finn-t3`.
 
@@ -165,8 +167,9 @@ gh pr list --label needs-human-review  # escalations only you can settle
 gh issue list --label blocked          # questions a builder is waiting on
 gh issue list --label finn-spec        # read new specs, label the good ones agent-ready
 ```
-Anything the gate refuses — `tier:t3`, protected paths, dangerous content — you merge by
-hand, deliberately.
+Anything the gate refuses — Tier A protected paths, dangerous content — you merge by
+hand, deliberately. `tier:t3` alone no longer holds; most `tier:t3` work is Tier B and
+auto-merges fully once reviewed.
 
 ---
 
