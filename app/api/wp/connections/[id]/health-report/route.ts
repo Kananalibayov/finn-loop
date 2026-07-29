@@ -36,7 +36,9 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "healthSecret is required." }, { status: 400 });
   }
 
-  // Validate the health_secret (constant-time comparison in the helper).
+  // Validate the health_secret. verifyHealthSecret hashes both sides to a fixed-length
+  // digest and compares with crypto.timingSafeEqual — not Buffer.equals, which is a
+  // short-circuiting memcmp and not constant-time despite its name.
   if (!verifyHealthSecret(num, secret)) {
     return NextResponse.json({ ok: false, error: "Invalid health secret." }, { status: 403 });
   }
