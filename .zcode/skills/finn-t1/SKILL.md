@@ -232,9 +232,19 @@ Delete the `.verify-*.log` files before committing.
 
 ## 8. Ship
 
+Commit with your identity trailer from
+[`AGENT-TIERS.md`](../../../docs/AGENT-TIERS.md) §4.8 — this is what lets a reviewer in a
+**different session** (a cron run has no memory of this one) mechanically detect that you
+built this, instead of only being able to tell in-session:
+
 ```bash
 git add -A
-git commit -m "<message> (closes #<NUMBER>)"
+git commit -m "$(cat <<'EOF'
+<message> (closes #<NUMBER>)
+
+Co-Authored-By: <your exact identity string from AGENT-TIERS.md §4.8>
+EOF
+)"
 git push -u origin <branch-name>
 ```
 

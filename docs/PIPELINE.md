@@ -198,6 +198,13 @@ capability — the four review gates are mechanical. So **Sonnet 5 reviews GLM's
 GLM reviews Sonnet's `tier:t2` PRs**, and Kimi is needed only for `tier:t3` work and the
 checkpoint audit.
 
+**Knowing "not the author" is not free once crons run unattended.** Every PR is opened under
+the same GitHub account, so there is no field that says which model built it — that only ever
+worked from in-session memory. A cron-triggered pass has none. Every builder now commits a
+`Co-Authored-By:` trailer naming its own identity
+([`AGENT-TIERS.md`](./AGENT-TIERS.md) §4.8), and `finn-t3` checks a PR's commits for that
+trailer, mechanically, before reviewing — in addition to, not instead of, the memory check.
+
 ### What is actually enforced — read this before trusting the labels
 
 Be clear-eyed about where the real boundary is:

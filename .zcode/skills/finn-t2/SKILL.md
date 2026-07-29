@@ -155,6 +155,11 @@ output and exit codes from §3.
 Observed but out of scope: <one line each, or omit>
 ```
 
+Before pushing, confirm your commit carries a `Co-Authored-By:` trailer with your identity
+string from [`AGENT-TIERS.md`](../../../docs/AGENT-TIERS.md) §4.8 — this is what lets a
+reviewer in a **different session** (a cron run has no memory of this one) mechanically
+detect that you built this.
+
 ```bash
 gh pr create --title "<title>" --body "<the five sections>" --base <DEFAULT-BRANCH>
 gh issue comment <NUMBER> --body "PR opened: <PR-URL>"
