@@ -5,9 +5,10 @@
 // process so dev hot-reload doesn't leak handles.
 
 import Database from "better-sqlite3";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { BUILTIN_TEMPLATES } from "@/lib/builtin-templates";
+import { BUILTIN_TEMPLATES } from "./builtin-templates.ts";
 
 export interface ProjectRow {
   id: number;
@@ -959,11 +960,12 @@ export function verifyHealthSecret(connectionId: number, secret: string): boolea
     .prepare(`SELECT health_secret FROM wp_connections WHERE id = ?`)
     .get(connectionId) as { health_secret: string | null } | undefined;
   if (!row || !row.health_secret) return false;
-  // Constant-time comparison.
-  const a = Buffer.from(secret);
-  const b = Buffer.from(row.health_secret);
-  if (a.length !== b.length) return false;
-  return a.equals(b); // Node Buffer.equals is constant-time
+  // Hash both sides to a fixed-length digest before comparing, so the comparison
+  // itself never branches on (and so never leaks) the raw secret's length, and
+  // timingSafeEqual never sees a length mismatch to throw on.
+  const a = createHash("sha256").update(secret).digest();
+  const b = createHash("sha256").update(row.health_secret).digest();
+  return timingSafeEqual(a, b);
 }
 
 // --- Clients (issue #68: client portal auth) ---
