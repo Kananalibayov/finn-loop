@@ -1,0 +1,124 @@
+name: close-delivered-issues
+
+# Closes the issue a merged PR said it closes, because GitHub's own "Closes #N" keyword is not
+# reliable in this repo.
+#
+# Observed live on 2026-07-29: FIVE consecutive merged PRs each carried "Closes #N" in the body
+# and none of their issues closed — #153→#152, #154→#148, #164→#158, #165→#159, #167→#162. The
+# work was verifiably on main in every case. Earlier the same day #147 and #96 failed the same
+# way while #97 and #131 succeeded, so this is intermittent rather than a misuse of the keyword.
+# The likely cause is that GitHub only honours the keyword for the branch's *default* base when
+# the squash is performed by native auto-merge, but the exact trigger does not matter — the
+# behaviour is not dependable and something has to backstop it.
+#
+# Why this matters far more than tidiness: builders pick work from open `agent-ready` issues. A
+# delivered-but-open issue is *ghost work*. A builder that inspects it finds the code already on
+# main, correctly refuses to rebuild it, and reports "no eligible issue found" — so the loop
+# looks starved while the queue is actually full of completed items. That happened for hours
+# today and is indistinguishable, from the outside, from having nothing left to build.
+#
+# This is deliberately a backstop, not a replacement: when GitHub's keyword works, this finds the
+# issue already closed and does nothing.
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to reconcile (for backfilling a missed one)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: close-delivered-issues-${{ github.event.pull_request.number || github.event.inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  close:
+    # pull_request_target fires on every close; only a MERGED pr means delivered. A closed-unmerged
+    # PR must never close its issue — the work did not happen.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const prNumber = context.eventName === 'workflow_dispatch'
+              ? Number(context.payload.inputs.pr)
+              : context.payload.pull_request.number;
+
+            if (!prNumber) {
+              core.setFailed('No PR number resolved.');
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber,
+            });
+
+            if (!pr.merged) {
+              console.log(`PR #${prNumber} is closed but NOT merged — the work did not land, so no issue is closed.`);
+              return;
+            }
+
+            // Only the explicit closing keywords count. A bare "#123" in prose is a reference,
+            // not a promise to deliver, and closing on that would shut issues a PR merely
+            // mentions (e.g. "same pattern as #147").
+            const body = pr.body || '';
+            const keyword = /\b(?:close[sd]?|fixe?[sd]?|resolve[sd]?)\s+#(\d+)\b/gi;
+            const targets = new Set();
+            for (const m of body.matchAll(keyword)) targets.add(Number(m[1]));
+
+            if (targets.size === 0) {
+              console.log(`PR #${prNumber}: no closing keyword in body — nothing to reconcile.`);
+              return;
+            }
+
+            for (const num of targets) {
+              let issue;
+              try {
+                ({ data: issue } = await github.rest.issues.get({
+                  owner, repo, issue_number: num,
+                }));
+              } catch (err) {
+                console.log(`#${num}: could not fetch (${err.status}) — skipping.`);
+                continue;
+              }
+
+              if (issue.pull_request) {
+                console.log(`#${num}: that is a PR, not an issue — skipping.`);
+                continue;
+              }
+              if (issue.state === 'closed') {
+                console.log(`#${num}: already closed (GitHub's keyword worked, or a human did it). No action.`);
+                continue;
+              }
+
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: num,
+                body:
+                  `✅ **Delivered by #${prNumber}**, which is merged.\n\n` +
+                  "Closed by `close-delivered-issues` because GitHub's own `Closes #N` keyword " +
+                  'did not fire — it is intermittent in this repo (five consecutive PRs missed ' +
+                  'it on 2026-07-29).\n\n' +
+                  'This is not cosmetic: builders pick work from open `agent-ready` issues, so a ' +
+                  'delivered-but-open issue is ghost work. A builder inspects it, finds the code ' +
+                  'already on `main`, correctly refuses to rebuild it, and reports "no eligible ' +
+                  'issue found" — the loop then looks starved while the queue is full of finished ' +
+                  'items.',
+              });
+              await github.rest.issues.update({
+                owner, repo, issue_number: num, state: 'closed', state_reason: 'completed',
+              });
+              console.log(`#${num}: CLOSED (delivered by merged PR #${prNumber}).`);
+            }

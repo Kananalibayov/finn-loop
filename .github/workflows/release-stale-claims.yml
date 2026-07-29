@@ -1,0 +1,123 @@
+name: release-stale-claims
+
+# Releases abandoned issue claims so the builder queue cannot silently starve.
+#
+# A claim is `gh issue edit --add-assignee "@me"` — a *cooperative advisory* lock, not an atomic
+# one. The builder skills do release it on graceful exits (both finn-t1 and finn-t2 pair
+# `--remove-assignee` with `blocked` and `needs-human-review`), but there is no release path for
+# a pass that simply STOPS: times out, crashes, is interrupted, or ends mid-build. And because
+# every agent authenticates as the repo owner, a stale claim is indistinguishable from the owner
+# assigning themselves, so nothing ever cleans it up.
+#
+# Observed live on 2026-07-29: 7 of 9 `agent-ready` issues were holding stale claims. The
+# builder's `no:assignee` filter therefore returned almost nothing and it reported "no eligible
+# issue found" for hours while a full backlog sat invisible. That is the worst failure mode
+# available here, because silent starvation looks exactly like "there is no work to do" — the
+# pipeline reports success while doing nothing, which is NORTH-STAR Invariant 4 turned inward on
+# the pipeline itself.
+#
+# Fix shape: mechanical, not prose. A rule a model has to remember to follow is not enforcement —
+# that is the same reasoning behind finn-gate and label-guard.
+#
+# Safety: an issue with an OPEN PR behind it is genuinely in flight and is never touched, so this
+# cannot yank work out from under a running build. Combined with a grace period, a builder that
+# claimed an issue moments ago is also safe.
+
+on:
+  schedule:
+    # Every 30 minutes. Matches the builder cadence, so at worst one builder pass sees a stale
+    # queue before it is cleaned.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: release-stale-claims
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // A claim younger than this is assumed to be an in-progress build that has not
+            // pushed a PR yet. Assigning an issue bumps its updatedAt, so "assigned and quiet
+            // for 60 minutes" is a sound staleness proxy without needing the timeline API.
+            const STALE_MINUTES = 60;
+            const cutoff = Date.now() - STALE_MINUTES * 60 * 1000;
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // One call, not one per issue: collect every issue number referenced by an OPEN PR,
+            // via both the body ("Closes #N") and the branch name ("156-apply-accounting",
+            // "codex/103-health"). Those issues are in flight and must never be released.
+            const openPrs = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+
+            const inFlight = new Set();
+            for (const pr of openPrs) {
+              const body = pr.body || '';
+              const branch = pr.head?.ref || '';
+              // Anchored on '#' so issue 156 is not matched by a stray "1560".
+              for (const m of body.matchAll(/#(\d+)\b/g)) inFlight.add(Number(m[1]));
+              // Branch conventions in this repo put the issue number first, optionally after a
+              // prefix segment: "156-foo", "codex/103-bar".
+              const bm = branch.match(/(?:^|\/)(\d+)-/);
+              if (bm) inFlight.add(Number(bm[1]));
+            }
+            console.log(`Open PRs: ${openPrs.length}. In-flight issues: ${[...inFlight].sort((a,b)=>a-b).join(', ') || '(none)'}`);
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: 'agent-ready', per_page: 100,
+            });
+
+            let released = 0;
+            for (const issue of issues) {
+              // listForRepo returns PRs too; skip them.
+              if (issue.pull_request) continue;
+              if (!issue.assignees || issue.assignees.length === 0) continue;
+
+              if (inFlight.has(issue.number)) {
+                console.log(`#${issue.number}: skipped — an open PR references it (genuinely in flight).`);
+                continue;
+              }
+
+              const updated = new Date(issue.updated_at).getTime();
+              if (updated > cutoff) {
+                const mins = Math.round((Date.now() - updated) / 60000);
+                console.log(`#${issue.number}: skipped — claimed/updated ${mins}m ago, inside the ${STALE_MINUTES}m grace period.`);
+                continue;
+              }
+
+              const names = issue.assignees.map(a => a.login);
+              await github.rest.issues.removeAssignees({
+                owner, repo, issue_number: issue.number, assignees: names,
+              });
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body:
+                  '🔓 **`release-stale-claims`: claim released, no work lost.**\n\n' +
+                  `This issue was assigned but has had no activity for over ${STALE_MINUTES} ` +
+                  'minutes and no open PR references it — so the pass that claimed it stopped ' +
+                  'without finishing and without releasing the claim.\n\n' +
+                  'Left alone, the claim would hide this issue from every future builder ' +
+                  "(their queue filters on `no:assignee`), and the loop would report \"no " +
+                  'eligible issue found" while a full backlog sat invisible. Releasing it puts ' +
+                  'the work back in the queue.\n\n' +
+                  'Nothing was deleted and no code was touched — this only cleared the assignee.',
+              });
+              console.log(`#${issue.number}: RELEASED (was assigned to ${names.join(', ')}).`);
+              released++;
+            }
+
+            console.log(released === 0
+              ? 'No stale claims found.'
+              : `Released ${released} stale claim(s).`);
