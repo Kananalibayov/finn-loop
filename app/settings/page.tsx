@@ -125,6 +125,10 @@ export default function SettingsPage() {
 
   // --- Section 1 handlers ---
   async function handleSaveApp() {
+    // Issue #135: never PUT against unloaded state. A failed GET leaves `app` null;
+    // persisting the patch built from empty newKey/newModel would overwrite real config
+    // with empty defaults (Invariant 4 — don't report success for work that didn't load).
+    if (!app) return;
     setAppSaving(true);
     setAppError(null);
     setAppResult(null);
@@ -261,6 +265,25 @@ export default function SettingsPage() {
           These power site generation for all clients. Overrides take precedence over <code>.env</code>.
         </p>
 
+        {/* Issue #135: on a failed GET (app === null && appError), render read-only with a
+            Retry button so no save can fire until the load succeeds. Persisting a patch
+            built from empty newKey/newModel would overwrite real config with empty defaults. */}
+        {app === null && appError ? (
+          <>
+            <div className="error" style={{ marginBottom: 12 }}>
+              Could not load Application settings: {appError}
+            </div>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={loadApp}
+              disabled={appLoading}
+            >
+              {appLoading ? "Retrying…" : "Retry"}
+            </button>
+          </>
+        ) : (
+          <>
         <label htmlFor="oai">OpenAI API key</label>
         <input
           id="oai"
@@ -296,6 +319,8 @@ export default function SettingsPage() {
         </div>
         {appResult && <div className="notice" style={{ marginTop: 12 }}>{appResult}</div>}
         {appError && <div className="error" style={{ marginTop: 12 }}>{appError}</div>}
+          </>
+        )}
       </section>
 
       {/* ---------------- Section 2: Account ---------------- */}
