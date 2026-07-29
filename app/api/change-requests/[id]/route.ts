@@ -1,6 +1,6 @@
 // Operator: approve/reject a change request.
 import { NextRequest, NextResponse } from "next/server";
-import { resolveChangeRequest } from "@/lib/db";
+import { getChangeRequestById, resolveChangeRequest } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,9 +27,22 @@ export async function POST(
     return NextResponse.json({ error: "status must be 'approved', 'rejected', or 'completed'." }, { status: 400 });
   }
 
-  const row = resolveChangeRequest(num, status, body.notes?.trim() || null);
-  if (!row) {
+  const current = getChangeRequestById(num);
+  if (!current) {
     return NextResponse.json({ error: "Request not found." }, { status: 404 });
+  }
+
+  const fromStatuses = status === "approved"
+    ? ["pending"]
+    : status === "rejected"
+      ? ["pending", "approved"]
+      : ["approved"];
+  const row = resolveChangeRequest(num, status, body.notes?.trim() || null, fromStatuses);
+  if (!row) {
+    return NextResponse.json(
+      { error: "Request is no longer in a state that allows this transition." },
+      { status: 409 },
+    );
   }
   return NextResponse.json(row);
 }

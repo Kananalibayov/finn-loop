@@ -1212,13 +1212,28 @@ export function resolveChangeRequest(
   id: number,
   status: string,
   operatorNotes: string | null,
+  fromStatuses: string[],
 ): ChangeRequestRow | null {
+  const allowedStatuses = ["pending", "approved", "rejected", "completed"];
+  if (!allowedStatuses.includes(status)) {
+    throw new Error(`Unknown change-request status: ${status}`);
+  }
+  for (const fromStatus of fromStatuses) {
+    if (!allowedStatuses.includes(fromStatus)) {
+      throw new Error(`Unknown change-request status: ${fromStatus}`);
+    }
+  }
+  if (fromStatuses.length === 0) {
+    throw new Error("fromStatuses must not be empty");
+  }
+
   const now = new Date().toISOString();
-  db()
+  const info = db()
     .prepare(
-      `UPDATE change_requests SET status = ?, operator_notes = ?, resolved_at = ? WHERE id = ?`,
+      `UPDATE change_requests SET status = ?, operator_notes = ?, resolved_at = ? WHERE id = ? AND status IN (${fromStatuses.map(() => "?").join(", ")})`,
     )
-    .run(status, operatorNotes, now, id);
+    .run(status, operatorNotes, now, id, ...fromStatuses);
+  if (info.changes !== 1) return null;
   return getChangeRequestById(id);
 }
 
