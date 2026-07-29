@@ -134,6 +134,7 @@ export default function ConnectionsPage() {
   }
 
   async function handleDelete(id: number) {
+    if (!window.confirm("Delete this connection? This cannot be undone.")) return;
     // AC-4 (issue #40): optimistic removal + per-card busy state.
     setDeletingId(id);
     try {

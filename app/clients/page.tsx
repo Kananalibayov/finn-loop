@@ -60,6 +60,7 @@ export default function ClientsPage() {
   }
 
   async function handleDelete(id: number) {
+    if (!window.confirm("Delete this client? This cannot be undone.")) return;
     setDeletingId(id);
     setError(null);
     try {

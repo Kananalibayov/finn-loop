@@ -51,6 +51,7 @@ export default function ProjectsPage() {
   }, []);
 
   async function handleDelete(id: number) {
+    if (!window.confirm("Delete this project? This cannot be undone.")) return;
     // Hard delete via DELETE /api/projects/[id] (unchanged from issue #5).
     // Optimistic local removal — no full refetch needed.
     setDeletingId(id);
