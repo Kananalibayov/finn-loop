@@ -1,19 +1,11 @@
 // AC-5, AC-6 (issue #74): operator list + create. Admin-only.
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, verifySessionRole } from "@/lib/auth";
-import { listOperators, createOperator, countAdmins } from "@/lib/db";
+import { listOperators, createOperator } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function isAdmin(req: NextRequest): boolean {
-  // Synchronous check — middleware already validated the session, but we need
-  // the role. We'll read it from the cookie in the handler via verifySessionRole
-  // in an async wrapper. For now, this is a placeholder; the actual check is
-  // done in the handler.
-  return true; // middleware already blocks non-authenticated; role check below
-}
 
 async function requireAdmin(req: NextRequest): Promise<boolean> {
   const token = req.cookies.get(COOKIE_NAME)?.value;
