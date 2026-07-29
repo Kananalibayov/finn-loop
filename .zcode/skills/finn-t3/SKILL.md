@@ -178,9 +178,16 @@ Ground every finding in a re-run command, not in reading the diff.
 ### 1e. Post the verdict — the first line is a machine contract
 
 `.github/workflows/finn-gate.yml` parses the first line of your comment to decide whether the
-reviewed commit is still the current one. **The first line must be exactly
-`Finn-loop review of <full 40-char SHA>` and nothing else.** No markdown, no prefix, no
-shortened SHA. If you deviate, the gate cannot verify freshness and the PR will never pass.
+reviewed commit is still the current one. **The first line must be
+`Finn-loop review of <full 40-char SHA>`, optionally preceded by a markdown heading marker
+(`#` … `######`), and nothing else on that line.** No prose before it, no text after the SHA,
+no shortened or uppercase SHA. If you deviate, the gate cannot verify freshness and the PR
+will never pass.
+
+The heading marker is tolerated because requiring a byte-exact line silently blocked three
+real approvals — the gate reported "no review comment found" while a valid review sat in plain
+sight. Everything else about the line is still strict, because the SHA-equals-head check is
+the only thing preventing unreviewed code from merging under a stale label.
 
 ```md
 Finn-loop review of a1b2c3d4e5f6789012345678901234567890abcd
