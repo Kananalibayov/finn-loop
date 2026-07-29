@@ -22,5 +22,6 @@ export function getOpenAI(): OpenAI {
       "OPENAI_API_KEY is not set. Add it in Settings (Application) or set it in .env.",
     );
   }
-  return new OpenAI({ apiKey });
+  // CI injection point for the OpenAI mock; undefined preserves the default endpoint.
+  return new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
 }

@@ -64,6 +64,8 @@ ENV DATABASE_FILE=/app/data/app.db
 ENV PORT=3000
 # Allow HOSTNAME binding so `next start`-equivalent listens on all interfaces.
 ENV HOSTNAME=0.0.0.0
+ARG COMMIT_SHA=unknown
+ENV COMMIT_SHA=$COMMIT_SHA
 
 # Run as a non-root user (AC-2).
 RUN addgroup --system --gid 1001 nodejs \

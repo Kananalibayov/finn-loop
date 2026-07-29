@@ -1,0 +1,96 @@
+name: Docker Smoke
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Prepare throwaway admin hash
+        run: |
+          npm ci --ignore-scripts
+          HASH="$(node -e "console.log(require('bcryptjs').hashSync('ci-throwaway-password', 10))")"
+          echo "ADMIN_PASSWORD_HASH=$HASH" >> "$GITHUB_ENV"
+
+      - name: Build CI image
+        run: COMMIT_SHA="$IMAGE_SHA" docker compose -f docker-compose.ci.yml build
+
+      - name: Boot CI stack
+        run: docker compose -f docker-compose.ci.yml up -d
+
+      - name: Wait for app and WordPress
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/health >/tmp/health.json &&
+               curl -fsS http://localhost:8080/wp-login.php >/dev/null; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for app and WordPress"
+          exit 1
+
+      - name: Assert smoke signals
+        run: |
+          set -euo pipefail
+          curl -fsS http://localhost:3000/api/health > /tmp/health.json
+          node -e '
+            const fs = require("node:fs");
+            const health = JSON.parse(fs.readFileSync("/tmp/health.json", "utf8"));
+            const expectedSha = process.env.IMAGE_SHA;
+            if (health.status !== "ok") throw new Error(`status=${health.status}`);
+            if (health.sha !== expectedSha) throw new Error(`sha=${health.sha} expected=${expectedSha}`);
+            if (!health.db || !String(health.db.path).endsWith("/app/data/app.db")) {
+              throw new Error(`db.path=${health.db && health.db.path}`);
+            }
+            console.log(`health status=${health.status}`);
+            console.log(`health sha=${health.sha}`);
+            console.log(`health db.path=${health.db.path}`);
+          '
+          docker compose -f docker-compose.ci.yml exec -T app wget -qO- http://openai-mock:4010/v1/models
+          docker compose -f docker-compose.ci.yml exec -T app node -e '
+            const http = require("node:http");
+            const payload = JSON.stringify({ model: "ci-mock", messages: [{ role: "user", content: "ping" }] });
+            const req = http.request(
+              "http://openai-mock:4010/v1/chat/completions",
+              { method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(payload) } },
+              (res) => {
+                let body = "";
+                res.setEncoding("utf8");
+                res.on("data", (chunk) => { body += chunk; });
+                res.on("end", () => {
+                  if (res.statusCode !== 200) throw new Error(`status=${res.statusCode}`);
+                  const parsed = JSON.parse(body);
+                  const content = parsed.choices?.[0]?.message?.content;
+                  if (!content) throw new Error("missing mock completion content");
+                  console.log(`mock completion=${content}`);
+                });
+              },
+            );
+            req.on("error", (err) => { throw err; });
+            req.end(payload);
+          '
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.ci.yml logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.ci.yml down -v
