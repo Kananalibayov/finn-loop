@@ -130,9 +130,11 @@ export default function SettingsPage() {
     setAppResult(null);
     try {
       const patch: { openaiApiKey?: string; generationModel?: string } = {};
-      // Only send fields the operator touched. For the key, empty = clear.
+      // Only send the key when the operator typed one — empty field means
+      // "leave the key untouched", not "clear it". Omitting the property makes
+      // the PUT route's hasOwnProperty check skip the key entirely. Clearing a
+      // previously-set key is a separate affordance (out of scope: NG-1).
       if (newKey !== "") patch.openaiApiKey = newKey.trim();
-      else patch.openaiApiKey = ""; // explicit clear only if they emptied a previously-set field
       patch.generationModel = newModel.trim();
       const res = await fetch("/api/app/settings", {
         method: "PUT",
