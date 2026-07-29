@@ -54,7 +54,7 @@ builder may take** (`lib/auth.ts`, `middleware.ts`, `.github/workflows/`, `.zcod
 `.github/CODEOWNERS`, `AGENTS.md`, `ROADMAP.md`, or a rule doc) **or it carries
 `needs-approval`** → implement it yourself (§2). End.
 
-**(d) Fewer than 5 issues are `agent-ready`** → refill the backlog (§3). End.
+**(d) Fewer than 10 issues are `agent-ready`** → refill the backlog (§3). End.
 
 **(e) Nothing matches** → report the queue state in one short table and end.
 
@@ -287,8 +287,17 @@ you too.
 ## 3. Refill the spec backlog
 
 Read [`../../../ROADMAP.md`](../../../ROADMAP.md), then **card enough items to bring the
-`agent-ready` count to 5.** Multiple issues per pass, not one — a timed loop that adds one spec
-per pass cannot keep a builder fed.
+`agent-ready` count to 10.** Multiple issues per pass, not one — a loop that adds one spec per
+pass cannot keep a builder fed.
+
+**Why 10:** this skill runs roughly **once a day**, while the builder runs every ~30 minutes.
+One pass therefore has to stock a whole day of building. Ten is the practical ceiling rather
+than an arbitrary number: most roadmap items depend on an earlier one (`renderHtml` needs the
+section registry merged first), so carding far beyond ten mostly produces issues that
+immediately go `blocked`, and specs written a long way ahead of the code they touch go stale —
+issue #137 was retracted for exactly that reason, having been carded against a misread of the
+real data flow. If the queue still drains before the next scheduled pass, the human triggers a
+pass by hand; that is expected, not a failure.
 
 **You decide the order.** Prefer the earliest incomplete phase, but you may reorder *within
 and across* phases when your own reading of `NORTH-STAR.md`, `GAP-LEDGER.md` and
