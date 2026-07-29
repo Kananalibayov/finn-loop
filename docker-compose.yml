@@ -2,7 +2,7 @@
 #   docker compose up -d
 #
 # - Builds the image from ./Dockerfile (linux/amd64).
-# - Publishes port 3000 (override via PORT env).
+# - Publishes port 3000 on 127.0.0.1 only (override via PORT env; the reverse proxy terminates TLS).
 # - Mounts a named volume at /app/data so SQLite persists across restarts.
 # - Mounts the host .env read-only at /app/.env so secrets load without being
 #   baked into the image.
@@ -18,7 +18,7 @@ services:
     container_name: ai-website-generator
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "127.0.0.1:${PORT:-3000}:3000"
     volumes:
       # AC-4: persistent named volume for the SQLite DB + uploads.
       - app-data:/app/data
