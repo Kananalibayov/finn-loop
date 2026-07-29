@@ -41,8 +41,9 @@ MARKER_NAME="__BACKUP_RESTORE_PROBE__"
 
 mkdir -p "$THROWAWAY_DIR" "$HOST_BACKUP_DIR"
 
-# Marker row is inserted via the running app's own API so the schema is always
-# correct regardless of future migrations.
+# Marker row is inserted via a direct better-sqlite3 insert inside the
+# container (not the app's HTTP API) so the schema is always correct regardless
+# of future migrations. The app itself is never asked to create this row.
 INSERT_MARKER_JS="
 const Database = require('better-sqlite3');
 const db = new Database('/app/data/app.db');
@@ -109,6 +110,17 @@ services:
 volumes:
   app-data:
 EOF
+
+# Export Compose project context so scripts/backup-db.sh (which uses plain
+# `docker compose` with no -p/-f flags, per its documented production usage)
+# resolves THIS throwaway project, not the default cwd-based one. Without this,
+# backup-db.sh's `docker compose ps app` fail-closed check exits 1 because the
+# default project has no `app` service. (Review feedback on PR #138.)
+# The smoke's own calls still pass -p/-f explicitly, which is harmless when the
+# env vars agree. Production usage of backup-db.sh (run from repo root against
+# docker-compose.yml, per DEPLOY.md) is unaffected — it has no exporter.
+export COMPOSE_PROJECT_NAME="$PROJECT_NAME"
+export COMPOSE_FILE="$SMOKE_COMPOSE"
 
 # --- Step 1-2: build + boot, wait for health --------------------------------
 echo "SMOKE building + booting throwaway stack (project=${PROJECT_NAME})"

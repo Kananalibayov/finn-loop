@@ -13,6 +13,19 @@ on:
     # 05:17 UTC daily — off the top of the hour to dodge GitHub's cron rush.
     - cron: "17 5 * * *"
   workflow_dispatch:
+  # Run on PRs touching the backup/restore surface so the round-trip is proven
+  # on the branch (the workflow cannot be dispatched pre-merge — it doesn't
+  # exist on the default branch yet). Path-filtered to avoid running on
+  # unrelated changes. (Review feedback on PR #138.)
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/backup-db.sh"
+      - "ci/backup-restore-smoke.sh"
+      - ".github/workflows/backup-restore.yml"
+      - "docker-compose.yml"
+      - "docker-compose.ci.yml"
+      - "Dockerfile"
 
 permissions:
   contents: read
