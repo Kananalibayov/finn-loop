@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   docker-smoke:
     runs-on: ubuntu-latest
@@ -31,6 +35,16 @@ jobs:
 
       - name: Boot CI stack
         run: docker compose -f docker-compose.ci.yml up -d
+
+      - name: Retain tested image ID
+        run: |
+          set -euo pipefail
+          mapfile -t APP_IMAGE_IDS < <(docker compose -f docker-compose.ci.yml images -q app)
+          if [ "${#APP_IMAGE_IDS[@]}" -ne 1 ] || [ -z "${APP_IMAGE_IDS[0]}" ]; then
+            echo "Expected exactly one app image, found ${#APP_IMAGE_IDS[@]}"
+            exit 1
+          fi
+          echo "APP_IMAGE_ID=${APP_IMAGE_IDS[0]}" >> "$GITHUB_ENV"
 
       - name: Wait for app and WordPress
         run: |
@@ -103,6 +117,44 @@ jobs:
           fi
           export WP_APP_PASSWORD
           node ci/smoke-golden-path.mjs
+
+      - name: Publish tested image to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          IMAGE_REPOSITORY="ghcr.io/${GITHUB_REPOSITORY,,}"
+          IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_SHA}"
+
+          printf '%s' "$GHCR_TOKEN" |
+            docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "$APP_IMAGE_ID" "$IMAGE_REF"
+          docker push "$IMAGE_REF"
+
+          docker image rm "$IMAGE_REF"
+          docker pull "$IMAGE_REF"
+
+          OBSERVED_COMMIT_SHA="$(
+            docker image inspect "$IMAGE_REF" \
+              --format '{{range .Config.Env}}{{println .}}{{end}}' |
+              grep '^COMMIT_SHA=' |
+              tail -n 1
+          )"
+          if [ "$OBSERVED_COMMIT_SHA" != "COMMIT_SHA=$IMAGE_SHA" ]; then
+            echo "Image commit mismatch: observed $OBSERVED_COMMIT_SHA"
+            exit 1
+          fi
+
+          PUSHED_DIGEST="$(
+            docker image inspect "$IMAGE_REF" --format '{{index .RepoDigests 0}}'
+          )"
+          if [ -z "$PUSHED_DIGEST" ]; then
+            echo "Pushed image has no registry digest"
+            exit 1
+          fi
+          echo "Published image: $IMAGE_REF"
+          echo "Published digest: $PUSHED_DIGEST"
 
       - name: Logs on failure
         if: failure()
