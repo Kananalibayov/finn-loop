@@ -1,4 +1,6 @@
 import type { SectionType } from "../site-model.ts";
+import { galleryColumns } from "./gallery/columns.ts";
+import { galleryGrid } from "./gallery/grid.ts";
 import { heroCentered } from "./hero/centered.ts";
 import { heroSplit } from "./hero/split.ts";
 import { REGISTRY_VERSION, type SectionRenderer } from "./types.ts";
@@ -7,6 +9,10 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
   hero: {
     split: heroSplit as SectionRenderer<unknown>,
     centered: heroCentered as SectionRenderer<unknown>,
+  },
+  gallery: {
+    grid: galleryGrid as SectionRenderer<unknown>,
+    columns: galleryColumns as SectionRenderer<unknown>,
   },
 };
 
