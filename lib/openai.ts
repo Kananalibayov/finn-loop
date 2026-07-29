@@ -6,7 +6,7 @@
 //  generation without an app restart.
 
 import OpenAI from "openai";
-import { getEffectiveOpenAiKey } from "@/lib/db";
+import { getEffectiveOpenAiKey } from "./db.ts";
 
 /** The model used when no DB/env override is set (default). Callers that want
  *  the actually-effective model should use getEffectiveGenerationModel(). */
