@@ -84,17 +84,17 @@ jobs:
           fi
           echo "Reviewed SHA matches head: $HEAD_SHA"
 
-          # ---- 3. Linked issue must not be tier:t3 -----------------------------
-          # Secondary signal only. tier:tN is LLM-assigned at spec time, so the
-          # diff-based checks below are the primary backstop.
+          # ---- 3. Linked issue tier (informational only) -----------------------
+          # tier:t3 no longer forces a hold here — the user has explicitly opted
+          # into full autonomy for GPT-5.6/Kimi-reviewed PRs, tier:t3 included,
+          # until told otherwise. The diff-based checks below (protected paths,
+          # dangerous content, the client_id landmine) remain the real backstop
+          # regardless of tier.
           body=$(gh pr view "$PR" --json body --jq .body)
           issue=$(printf '%s' "$body" | grep -oiE 'closes #[0-9]+' | head -1 | grep -oE '[0-9]+' || true)
           if [ -n "$issue" ]; then
             itiers=$(gh issue view "$issue" --json labels --jq '[.labels[].name] | join(",")' || echo "")
             echo "Linked issue #$issue labels: $itiers"
-            case ",$itiers," in
-              *,tier:t3,*) hold "linked issue #$issue is tier:t3 — never auto-merges" ;;
-            esac
           else
             echo "No linked issue found in PR body (not fatal for this gate)"
           fi
