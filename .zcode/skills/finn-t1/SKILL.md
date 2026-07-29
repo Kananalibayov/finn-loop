@@ -34,14 +34,33 @@ comment what changed. End the pass.
 **(b) An issue is ready for me:**
 
 ```bash
-gh issue list --state open --label "tier:t1" --label agent-ready \
-  --search "no:assignee -label:blocked" --json number,title
+gh issue list --state open --label agent-ready \
+  --search "no:assignee -label:blocked" --json number,title,body
 ```
 
-Take the lowest number. Continue to §1.
+Take the **lowest number** whose `## Files In Scope` mentions none of these paths, and which
+does **not** carry `needs-approval`:
 
-**(c) Nothing matches:** say the T1 queue is empty and end the pass. Never take a
-`tier:t2` or `tier:t3` issue. Never invent work.
+```
+lib/auth.ts  middleware.ts  .github/workflows/  .zcode/skills/  .github/CODEOWNERS
+AGENTS.md  ROADMAP.md  docs/NORTH-STAR.md  docs/AGENT-TIERS.md  docs/PIPELINE.md
+docs/GAP-LEDGER.md  docs/PRODUCT-VISION.md
+```
+
+Continue to §1.
+
+**There is no longer a `tier:` filter here, and that is deliberate.** `tier:tN` was assigned by
+a model at spec time and was repeatedly wrong — two issues had to be re-tiered by hand, and a
+verified-good PR was escalated purely because a "t1 model" built a "t2 issue". `AGENT-TIERS.md`
+§10 concedes the point: *"the tier label never was the real gate."* What actually protects
+anything is the path list above (the same one `finn-gate.yml` holds on at merge time) plus
+`needs-approval` for danger no path list can see, such as credential generation. Filtering on
+`tier:` on top of that only starved the queue: it left a fully-specced, approved backlog
+invisible while this skill reported an empty queue.
+
+**(c) Nothing matches:** say the queue is empty and end the pass. Never take an issue that
+trips the path list or carries `needs-approval` — those are for a T3 pass and a human merge.
+Never invent work.
 
 ---
 

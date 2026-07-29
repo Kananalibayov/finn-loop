@@ -41,6 +41,30 @@ this section is written so it does not go stale when they do.
 Fill each slot from your roster using the placement test below. Any model in a slot may do
 that slot's work — they are interchangeable within a slot.
 
+> **The `tier:tN` issue labels are retired. This table describes model *capability*, not an
+> access-control list, and no automation reads it.**
+>
+> The labels were dropped because they were assigned by a model at spec time and were
+> repeatedly wrong: two issues needed re-tiering by hand, a verified-good PR was escalated
+> purely because a "t1 model" built a "t2 issue", and — worst — a fully specced, approved
+> backlog sat invisible while a builder filtering on `tier:t1` reported an empty queue. See
+> §10: *the diff-based scan is what matters; the tier label never was the real gate.*
+>
+> **What gates work now, mechanically:**
+> - **Builders** (`finn-t1`, `finn-t2` §0(b)) skip any issue whose `## Files In Scope` touches
+>   `lib/auth.ts`, `middleware.ts`, `.github/workflows/`, `.zcode/skills/`,
+>   `.github/CODEOWNERS`, `AGENTS.md`, `ROADMAP.md` or a rule doc, and any issue labelled
+>   `needs-approval`.
+> - **`roadmap-approve.yml`** auto-approves on the same two conditions, as
+>   `github-actions[bot]` — an identity no agent can assume.
+> - **`finn-gate.yml`** holds the same path list at merge time, so the concept is enforced at
+>   both approval and merge.
+> - **`needs-approval`** covers danger no path list can see — credential generation is the
+>   motivating case, since it lives in freely-mergeable files.
+>
+> The "Never give it" column below still tells you which model to *choose* for a piece of work.
+> It is guidance for a human or a T3 spec author, not a rule a builder enforces on itself.
+
 | Slot | What it does | What it needs | Never give it |
 |---|---|---|---|
 | **T3-A — Architect** | Decides the schema, the publish/page-ownership model, the SiteModel, the credential lifecycle. Its output is a decision, not a diff | **The strongest model you have**, highest reasoning effort. Cost is irrelevant here — these decisions are made once and everything else depends on them | Nothing. This slot has no restrictions |
