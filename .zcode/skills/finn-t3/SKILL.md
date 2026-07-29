@@ -265,6 +265,25 @@ Write **one** issue for it, sized to ≤ 1 day. Use the nine-section shape from
 
 Plus `## Depends on` whenever it needs something else landed first.
 
+**For `tier:t1`/`tier:t2` issues only, also add:**
+
+```md
+## Cites ROADMAP.md line
+> <the exact unchecked bullet from ROADMAP.md, copied verbatim — the WHOLE item,
+>   including every wrapped continuation line if it spans more than one line, and
+>   including the "- [ ]" prefix>
+```
+
+**This is what lets the issue skip the manual `agent-ready` step.**
+`.github/workflows/roadmap-approve.yml` checks this section against `ROADMAP.md` on
+`main` and, if it matches a currently-unchecked item **verbatim, in full**, applies
+`agent-ready` itself as `github-actions[bot]` — an identity no agent's token can assume,
+which is why this is safe to automate and `agent-ready` isn't otherwise. A paraphrase, a
+partial quote of a multi-line item, or a line that's already checked off will not match
+and will not approve — copy it exactly, from the file, not from memory. Omit this section
+entirely for anything not a direct roadmap transcription (a `blocked` re-card like #103,
+or ad-hoc work) — those still go through you.
+
 Then decide the tier by **blast radius, not diff size**, and stamp it:
 
 ```bash
@@ -286,8 +305,10 @@ author's.
 ways? does it require a decision the executor would have to make? is the anchor real, copied
 from the open file?
 
-**Never apply `agent-ready`.** That label is the human's approval gate — it is the one thing
-in this pipeline you may not do.
+**You never apply `agent-ready` yourself, under any circumstance.** For a roadmap
+transcription, a correct `## Cites ROADMAP.md line` section lets `roadmap-approve.yml` grant
+it — that is a mechanical bot check confirming work the human already committed to, not you
+approving your own spec. For anything else, it is the human's approval gate, full stop.
 
 ---
 

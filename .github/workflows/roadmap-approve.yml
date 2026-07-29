@@ -1,0 +1,183 @@
+name: roadmap-approve
+
+# Auto-approves a NEW tier:t1/tier:t2 issue for building, IF it verbatim-quotes an
+# unchecked line that is currently on ROADMAP.md's main. This is the one part of the
+# approval gate that can be automated safely, because it is not a judgment call — it is
+# a mechanical check that the work was already committed to by the human (merging the
+# PR that put that line on ROADMAP.md in the first place).
+#
+# Why this is real enforcement, unlike label-guard: every agent in this project
+# authenticates as the repo owner, so label-guard cannot distinguish an agent applying
+# agent-ready from the owner doing it. This workflow runs as github-actions[bot] via the
+# default GITHUB_TOKEN, an identity no agent's token can assume - so an agent citing a
+# line that ISN'T on the roadmap gets nothing, no matter how it asks.
+#
+# tier:t3 issues are never touched here. That tier is deliberately the human-gated one -
+# schema, auth, secrets, credential lifecycle - and this workflow does not even inspect
+# them.
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: roadmap-approve-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Check citation against ROADMAP.md and approve or explain
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const issue_number = context.payload.issue.number;
+
+            // Re-fetch fresh rather than trusting the event payload alone - avoids
+            // acting on a stale label snapshot if multiple events land close together.
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+            });
+
+            const labelNames = issue.labels.map(l => (typeof l === 'string' ? l : l.name));
+
+            // Only tier:t1 / tier:t2, and only if not already approved. tier:t3 is
+            // deliberately never inspected here - that tier is the human-gated one.
+            const isEligibleTier = labelNames.includes('tier:t1') || labelNames.includes('tier:t2');
+            const alreadyApproved = labelNames.includes('agent-ready');
+            if (!isEligibleTier || alreadyApproved) {
+              console.log(`Skipping #${issue_number}: eligible=${isEligibleTier}, alreadyApproved=${alreadyApproved}`);
+              return;
+            }
+
+            const body = issue.body || '';
+
+            // The issue must contain a "## Cites ROADMAP.md line" section with a
+            // blockquoted line. Absence of this section is the NORMAL case for most
+            // issues (ad-hoc human specs, re-cards, anything not self-filed by finn-t3's
+            // backlog-refill step) - stay completely silent, do not comment on every
+            // issue that simply doesn't use this convention.
+            const sectionMatch = body.match(/##\s*Cites ROADMAP\.md line\s*\n+((?:>.*\n?)+)/i);
+            if (!sectionMatch) {
+              console.log(`#${issue_number}: no "Cites ROADMAP.md line" section present - not this workflow's concern.`);
+              return;
+            }
+
+            // Extract the quoted text: strip the leading "> " from each blockquoted
+            // line and rejoin, so a citation can span more than one line if the
+            // ROADMAP.md bullet itself wraps.
+            const quoted = sectionMatch[1]
+              .split('\n')
+              .map(l => l.replace(/^>\s?/, ''))
+              .join('\n')
+              .trim();
+
+            if (!quoted) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body: '🤖 `roadmap-approve`: found a "Cites ROADMAP.md line" section but it quoted nothing. Not approving — quote the exact unchecked line from `ROADMAP.md`, including its `- [ ]` prefix.',
+              });
+              return;
+            }
+
+            const roadmap = fs.readFileSync('ROADMAP.md', 'utf8');
+
+            // ROADMAP.md bullets routinely wrap onto continuation lines (no bullet
+            // marker, just extra indent) - e.g. "- [ ] CI job: ...beside a **real" /
+            // "      WordPress container** and a mocked OpenAI" is ONE item. Comparing
+            // against individual lines would (a) never match a wrapped item's full text
+            // and (b) wrongly accept a citation of just its first line as if that were
+            // the whole item. So parse whole items - a bullet line plus every following
+            // non-blank, non-heading, non-blockquote, non-rule line until the next
+            // bullet - and require the citation to match one COMPLETE item.
+            function parseRoadmapItems(text) {
+              const items = [];
+              let current = null;
+              for (const raw of text.split('\n')) {
+                const t = raw.trim();
+                if (/^- \[[ x]\]/.test(t)) {
+                  if (current) items.push(current.join('\n'));
+                  current = [t];
+                } else if (current && t !== '' && !t.startsWith('#') && !t.startsWith('>') && t !== '---') {
+                  current.push(t);
+                } else {
+                  if (current) items.push(current.join('\n'));
+                  current = null;
+                }
+              }
+              if (current) items.push(current.join('\n'));
+              return items;
+            }
+
+            const roadmapItems = new Set(parseRoadmapItems(roadmap));
+            const normalizedQuote = quoted.split('\n').map(l => l.trim()).join('\n');
+
+            // The checkbox state in the CITATION itself decides what's possible, not just
+            // whether some matching text exists. Quoting the "- [x]" (already done) form
+            // of an item verbatim must never approve it, even though that exact string is
+            // genuinely present in the file - that would let a stale/adversarial citation
+            // of finished work sail through as if it were new. Approval requires citing
+            // the "- [ ]" (still unchecked) form, and that form must actually be present.
+            const quotedIsUnchecked = normalizedQuote.startsWith('- [ ]');
+            const quotedIsChecked = normalizedQuote.startsWith('- [x]');
+
+            let exactLine = false;
+            let isAlreadyChecked = false;
+
+            if (quotedIsUnchecked) {
+              exactLine = roadmapItems.has(normalizedQuote);
+              if (!exactLine) {
+                isAlreadyChecked = roadmapItems.has(normalizedQuote.replace(/^- \[ \]/, '- [x]'));
+              }
+            } else if (quotedIsChecked) {
+              isAlreadyChecked = roadmapItems.has(normalizedQuote);
+            }
+            // Anything not starting with a recognizable checkbox prefix falls through
+            // to the no-match comment below - neither exactLine nor isAlreadyChecked set.
+
+            if (exactLine) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                labels: ['agent-ready'],
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body: `🤖 **\`roadmap-approve\`: applied \`agent-ready\`.**\n\nThe cited line matches an unchecked item in \`ROADMAP.md\` on \`${context.payload.repository.default_branch}\` verbatim:\n\n> ${normalizedQuote.split('\n').join('\n> ')}\n\nThis approval was granted by the \`github-actions[bot]\` identity, which no agent's token can assume — it is a mechanical check that this work was already committed to when that line was merged into \`ROADMAP.md\`, not a new judgment call.`,
+              });
+              console.log(`Approved #${issue_number}`);
+            } else if (isAlreadyChecked) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body: `🤖 \`roadmap-approve\`: **not approving.** The cited line is already checked off (\`- [x]\`) in \`ROADMAP.md\` — this looks like it may already be done. Not adding \`agent-ready\`; a human should confirm this isn't duplicate work before proceeding.\n\n> ${normalizedQuote.split('\n').join('\n> ')}`,
+              });
+              console.log(`#${issue_number}: cited line already checked off, not approving`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body: `🤖 \`roadmap-approve\`: **not approving.** The quoted text does not match any unchecked line in \`ROADMAP.md\` verbatim (checked against \`${context.payload.repository.default_branch}\`). This could be a paraphrase, a typo, or work that isn't actually on the roadmap yet.\n\nQuoted:\n> ${normalizedQuote.split('\n').join('\n> ')}\n\nIf this work is genuinely wanted, either fix the citation to match \`ROADMAP.md\` exactly, or ask a human to add \`agent-ready\` directly.`,
+              });
+              console.log(`#${issue_number}: citation did not match verbatim, not approving`);
+            }
