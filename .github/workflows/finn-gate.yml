@@ -63,14 +63,22 @@ jobs:
           esac
 
           # ---- 2. Reviewed SHA must equal current head -------------------------
-          # finn-t3 posts a comment whose FIRST line is exactly:
+          # finn-t3 posts a comment whose FIRST line is:
           #   Finn-loop review of <40-char sha>
           # GitHub does not strip labels when new commits land, so this is the only
           # thing proving the approved code is the code about to merge.
+          #
+          # An optional leading markdown heading marker is tolerated. Requiring the
+          # line to be byte-exact silently blocked three separate approvals (two of
+          # Kimi's, one of mine) because writing "# " before a heading is what every
+          # model naturally does — and the failure mode is invisible: the gate reports
+          # "no review comment found" while a perfectly good review sits right there.
+          # Tolerating the prefix costs nothing: the SHA capture is still anchored and
+          # still must equal head, which is the property that actually matters.
           reviewed=$(gh pr view "$PR" --json comments \
             --jq '[.comments[].body
                    | split("\n")[0]
-                   | capture("^Finn-loop review of (?<sha>[0-9a-f]{40})\\s*$")?
+                   | capture("^#{0,6} *Finn-loop review of (?<sha>[0-9a-f]{40})[[:space:]]*$")?
                    | .sha] | last // ""')
           # Strip any surrounding quotes and CR, so this works regardless of whether
           # gh emits raw or JSON-quoted scalars.
