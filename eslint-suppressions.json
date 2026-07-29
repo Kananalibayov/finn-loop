@@ -16,7 +16,7 @@
   },
   "app/api/change-requests/[id]/apply/route.ts": {
     "no-restricted-syntax": {
-      "count": 5
+      "count": 3
     }
   },
   "app/api/change-requests/[id]/route.ts": {
