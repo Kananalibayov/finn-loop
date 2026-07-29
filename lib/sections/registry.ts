@@ -1,4 +1,6 @@
 import type { SectionType } from "../site-model.ts";
+import { testimonialsCards } from "./testimonials/cards.ts";
+import { testimonialsSingle } from "./testimonials/single.ts";
 import { heroCentered } from "./hero/centered.ts";
 import { heroSplit } from "./hero/split.ts";
 import { REGISTRY_VERSION, type SectionRenderer } from "./types.ts";
@@ -7,6 +9,10 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
   hero: {
     split: heroSplit as SectionRenderer<unknown>,
     centered: heroCentered as SectionRenderer<unknown>,
+  },
+  testimonials: {
+    cards: testimonialsCards as SectionRenderer<unknown>,
+    single: testimonialsSingle as SectionRenderer<unknown>,
   },
 };
 
