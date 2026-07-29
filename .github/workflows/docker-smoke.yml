@@ -87,6 +87,23 @@ jobs:
             req.end(payload);
           '
 
+      - name: Run golden-path smoke
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          for i in $(seq 1 60); do
+            if WP_APP_PASSWORD="$(docker compose -f docker-compose.ci.yml run --rm -T --no-deps --entrypoint cat wp-bootstrap /out/app-password 2>/dev/null)"; then
+              break
+            fi
+            sleep 5
+          done
+          if [ -z "${WP_APP_PASSWORD:-}" ]; then
+            echo "Timed out waiting for WordPress application password"
+            exit 1
+          fi
+          export WP_APP_PASSWORD
+          node ci/smoke-golden-path.mjs
+
       - name: Logs on failure
         if: failure()
         run: docker compose -f docker-compose.ci.yml logs
