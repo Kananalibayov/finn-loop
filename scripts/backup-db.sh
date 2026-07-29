@@ -40,22 +40,26 @@ IN_CONTAINER_BACKUP="/tmp/backup-${STAMP}.db"
 DB_FILE="${DATABASE_FILE:-/app/data/app.db}"
 
 # 1. Online backup via better-sqlite3 (already installed in the prod image).
-#    The inline Node script opens the source DB read-only-safe, calls backup()
-#    to /tmp/backup-<stamp>.db, then runs PRAGMA integrity_check on the result.
-#    Prints BACKUP_OK + the integrity result for the host script to parse.
+#    Database#backup() returns a Promise<BackupMetadata> — it is the async
+#    online-backup primitive. We MUST await it before closing the source or
+#    opening the destination, otherwise we can inspect/copy a backup that has
+#    not finished writing (review feedback on PR #138: the previous version
+#    assigned the promise to `meta` synchronously and raced on completion).
 docker compose exec -T app node -e "
 const Database = require('better-sqlite3');
-const src = new Database('${DB_FILE}', { readonly: true, fileMustExist: true });
-const meta = src.backup('${IN_CONTAINER_BACKUP}');
-src.close();
-const bak = new Database('${IN_CONTAINER_BACKUP}', { readonly: true });
-const integrity = bak.pragma('integrity_check', { simple: true });
-bak.close();
-if (String(integrity) !== 'ok') {
-  console.error('INTEGRITY_FAIL: ' + integrity);
-  process.exit(2);
-}
-console.log('BACKUP_OK pages=' + meta.totalPages + ' integrity=' + integrity);
+(async () => {
+  const src = new Database('${DB_FILE}', { readonly: true, fileMustExist: true });
+  const meta = await src.backup('${IN_CONTAINER_BACKUP}');
+  src.close();
+  const bak = new Database('${IN_CONTAINER_BACKUP}', { readonly: true });
+  const integrity = bak.pragma('integrity_check', { simple: true });
+  bak.close();
+  if (String(integrity) !== 'ok') {
+    console.error('INTEGRITY_FAIL: ' + integrity);
+    process.exit(2);
+  }
+  console.log('BACKUP_OK pages=' + meta.totalPages + ' integrity=' + integrity);
+})().catch((e) => { console.error('BACKUP_ERROR: ' + (e && e.message ? e.message : e)); process.exit(3); });
 "
 
 # 2. Copy the verified backup out of the container to the host destination.
