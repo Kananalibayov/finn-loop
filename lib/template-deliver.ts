@@ -132,8 +132,9 @@ export async function deliverFromTemplate(
     throw new Error("Template spec is missing the `vars` object.");
   }
   const theme = synthesizeTheme(spec, template.name, template.description);
-  // generatePages takes the Theme.id ("template"); we store storedThemeId on the row.
-  const result = await generatePages({ input, mode: "full", themeId: theme.id });
+  // The full Theme object is passed through GenerateOptions.theme; the id only
+  // labels the stored record.
+  const result = await generatePages({ input, mode: "full", themeId: theme.id, theme });
   return { pages: result.pages, themeId: storedThemeId, modeUsed: "guided" };
 }
 
