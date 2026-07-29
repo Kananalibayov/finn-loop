@@ -54,7 +54,7 @@ function htmlForBusiness(businessName) {
   </main>
   <footer>Contact ${escaped} today.</footer>
 </body>
-</html>`;
+`;
 }
 
 const server = http.createServer((req, res) => {
