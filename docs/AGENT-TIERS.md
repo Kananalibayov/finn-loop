@@ -716,20 +716,28 @@ ran `gh pr merge` from the builder LLM.
 
 **Resolution: no LLM merges — GitHub does.** `.github/workflows/finn-gate.yml` is a required
 status check that passes only when `loop-approved` is present, `needs-human-review` is absent,
-the reviewed SHA equals the current head, the diff trips no protected-path or
-dangerous-content rule, and the linked issue is not `tier:t3`. When it passes it enables
-GitHub's *native* auto-merge; GitHub performs the merge. `finn-build` was deleted.
+the reviewed SHA equals the current head, and the diff trips no Tier A protected-path or
+dangerous-content rule. When it passes it enables GitHub's *native* auto-merge; GitHub performs
+the merge. `finn-build` was deleted.
 
 Two properties worth understanding:
 
 - **The stale-review race closes itself.** GitHub does not strip labels when new commits land,
   so `loop-approved` alone is not proof. Pushing any commit re-runs the gate, the reviewed SHA
   stops matching head, the check goes red, and GitHub withholds the merge.
-- **The diff-based scan is primary; the tier label is redundancy.** `tier:tN` is LLM-assigned
-  at spec time, so a mis-tiered auth issue is exactly the failure the blast-radius rule exists
-  for. A `tier:t1` PR that touches `lib/auth.ts` is still blocked. `.github/CODEOWNERS`
-  additionally requires owner review on those paths — a GitHub-native backstop that survives a
-  bug in our own workflow.
+- **The diff-based scan is what matters — the tier label never was the real gate.** `tier:tN`
+  is LLM-assigned at spec time, so a mis-tiered auth issue is exactly the failure the
+  blast-radius rule exists for: a `tier:t1` PR that touches `lib/auth.ts` is still blocked, by
+  path, regardless of what tier it claims to be. The path list itself is split into two tiers
+  by risk kind, not by `tier:tN` label — **Tier A** (self-referential governance:
+  `.github/workflows/**`, `.zcode/skills/**`, `.github/CODEOWNERS`, `AGENTS.md`, `ROADMAP.md`,
+  `docs/**`; plus the auth/session boundary: `lib/auth.ts`, `middleware.ts`) always holds for a
+  human and is additionally backed by `.github/CODEOWNERS` requiring owner review — a
+  GitHub-native backstop that survives a bug in our own workflow. **Tier B** (`lib/db.ts`,
+  `lib/net.ts`, `lib/plesk.ts`, `lib/wp.ts`, `Dockerfile`, `docker-compose.yml`,
+  `package.json`/`package-lock.json`, `tsconfig.json`, `next.config.mjs`, `.nvmrc`, and all
+  `app/**` code) auto-merges fully once independently reviewed and CI is green — real but
+  bounded/revertible risk, opened up by explicit user request for full `tier:t3` automation.
 
 Kill switch: repo variable `FINN_AUTOMERGE`. Anything but `on` is dry-run.
 

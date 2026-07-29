@@ -9,33 +9,25 @@
 # Rationale: docs/AGENT-TIERS.md §8 deliberately limits the reviewer to blocking on only
 # four grounds, so a reviewer can legitimately approve code it was never scoped to
 # scrutinise. These paths are where that gap is unacceptable.
+#
+# Tier A only (see finn-gate.yml's protected-path comment for the full rationale). Schema,
+# credentials-adjacent integrations, and the build/deploy surface (lib/db.ts, lib/plesk.ts,
+# lib/wp.ts, lib/net.ts, package.json, tsconfig.json, next.config.mjs, Dockerfile,
+# docker-compose.yml) were moved out of Tier A by explicit user request for full tier:t3
+# automation — real but bounded/revertible risk, not self-referential or auth-boundary risk.
 
 # Authentication, sessions, and the request gate
 /lib/auth.ts                @Kananalibayov
 /middleware.ts              @Kananalibayov
 
-# Schema, and every outbound integration that carries credentials
-/lib/db.ts                  @Kananalibayov
-/lib/plesk.ts               @Kananalibayov
-/lib/wp.ts                  @Kananalibayov
-/lib/net.ts                 @Kananalibayov
-
 # The verifier itself. A model that can edit CI can disable its own checks.
 /.github/                   @Kananalibayov
 
 # The pipeline's own rules. A model that can edit these can rewrite its constraints.
-/.zcode/skills/             @Kananalibayov
+/.zcode/skills/              @Kananalibayov
 /AGENTS.md                  @Kananalibayov
 
 # Governance and scope. ROADMAP.md is load-bearing: once roadmap lines act as standing
 # approval, a model that can edit it can grant itself unlimited future scope.
-/ROADMAP.md                 @Kananalibayov
-/docs/                      @Kananalibayov
-
-# Build, dependency, and deploy surface
-/package.json               @Kananalibayov
-/package-lock.json          @Kananalibayov
-/tsconfig.json              @Kananalibayov
-/next.config.mjs            @Kananalibayov
-/Dockerfile                 @Kananalibayov
-/docker-compose.yml         @Kananalibayov
+/ROADMAP.md                  @Kananalibayov
+/docs/                       @Kananalibayov

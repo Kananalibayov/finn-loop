@@ -59,8 +59,9 @@ acting on a deterministic check.
 
 1. Add `agent-ready` when a spec looks right (the approval gate).
 2. Answer issues labelled `blocked` or `needs-human-review`.
-3. Merge by hand only what the gate deliberately refuses — `tier:t3`, protected paths,
-   dangerous content.
+3. Merge by hand only what the gate deliberately refuses — Tier A protected paths (see §4a),
+   dangerous content. (`tier:t3` alone no longer forces a hold — most `tier:t3` work is
+   Tier B and auto-merges fully once reviewed.)
 
 ---
 
@@ -160,17 +161,18 @@ not an instruction to merge.
 |---|---|
 | `loop-approved` present, `needs-human-review` absent | A T3 reviewer signed off and nothing is escalated |
 | Latest `Finn-loop review of <SHA>` comment == current head SHA | **The stale-review race.** GitHub does not strip labels on new commits, so the label alone proves nothing |
-| No protected path in the diff | `lib/auth.ts`, `middleware.ts`, `lib/db.ts`, `lib/plesk.ts`, `lib/wp.ts`, `lib/net.ts`, `.github/**`, `.zcode/skills/**`, `Dockerfile`, `docker-compose.yml`, `package*.json`, `tsconfig.json`, `next.config.mjs` |
+| No **Tier A** protected path in the diff | `lib/auth.ts`, `middleware.ts`, `.github/**`, `.zcode/skills/**`, `AGENTS.md`, `ROADMAP.md`, `docs/**` — self-referential governance plus the auth/session boundary. See §4a's Tier A/Tier B split below for the full rationale; `lib/db.ts`, `lib/plesk.ts`, `lib/wp.ts`, `lib/net.ts`, `Dockerfile`, `docker-compose.yml`, `package*.json`, `tsconfig.json`, `next.config.mjs` are **Tier B** and no longer hold |
 | No dangerous content **added** | Path lists miss semantics — a `tier:t2` PR can add `lib/sessionHelper.ts` or inline `ALTER TABLE` in a route. Scans added lines for JWT/bcrypt/secret-env/DDL/`exec(`/`eval(`/crypto calls |
-| Linked issue is not `tier:t3` | T3 is *defined* as the dangerous work |
 
 When it passes, the workflow enables GitHub's **native** auto-merge. GitHub then merges once
 every required check is green. Because `finn-gate` is itself required, pushing any commit
 re-runs it, the SHA stops matching, and the merge is withheld automatically.
 
-**`.github/CODEOWNERS`** requires owner review on the same protected paths. That is deliberate
-redundancy: `finn-gate` is our own code and could have a bug, whereas CODEOWNERS is enforced by
-GitHub itself and cannot be bypassed by a faulty workflow.
+**`.github/CODEOWNERS`** requires owner review on the same **Tier A** paths only — not Tier B.
+That is deliberate redundancy for the paths that stay gated: `finn-gate` is our own code and
+could have a bug, whereas CODEOWNERS is enforced by GitHub itself and cannot be bypassed by a
+faulty workflow. Tier B relies on `finn-gate`'s diff scan alone, by design — the user explicitly
+chose full automation there in exchange for a single (not double) enforcement layer.
 
 **Kill switch.** Repo variable `FINN_AUTOMERGE`:
 
@@ -184,7 +186,7 @@ GitHub itself and cannot be bypassed by a faulty workflow.
 | Verdict | Check | Auto-merge | Meaning |
 |---|---|---|---|
 | **merge** | 🟢 green | enabled | Everything clear. GitHub merges when required checks pass |
-| **hold** | 🟢 green | **not** enabled | Nothing is wrong — this needs a deliberate human. Protected path, added dangerous content, `tier:t3`, or `needs-human-review`. A comment explains which |
+| **hold** | 🟢 green | **not** enabled | Nothing is wrong — this needs a deliberate human. Tier A protected path, added dangerous content, or `needs-human-review`. A comment explains which |
 | **block** | 🔴 red | no | Something *is* wrong: no `loop-approved`, a stale review, or CI red for this SHA |
 
 A **hold is green on purpose.** If it went red, then with `gate` as a required check every
