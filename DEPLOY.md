@@ -57,14 +57,17 @@ Compose rebuilds the image and recreates the container. The `app-data` volume is
 
 ## Backups
 
-The SQLite DB lives at `/app/data/app.db` inside the container (backed by the `app-data` named volume). To back it up from the host:
+The SQLite DB lives at `/app/data/app.db` inside the container (backed by the `app-data` named volume). To take an **online** backup (safe to run while the app is serving requests) from the host:
 
 ```bash
-docker run --rm -v app-data:/data -v "$(pwd)":/backup alpine \
-  sh -c "cp /data/app.db /backup/app.db.$(date +%Y%m%d)"
+scripts/backup-db.sh ./backups
 ```
 
-(This repo intentionally has no automated backup mechanism — issue #15's NG-2. Run the above on whatever cadence suits you.)
+This uses `better-sqlite3`'s `Database#backup()` API through `docker compose exec`, runs `PRAGMA integrity_check` on the result, and copies the verified backup to the directory you pass. It prints the final host path and `PRAGMA_INTEGRITY=ok`. Never byte-copy the live `app.db` with a raw `cp` — it may capture a half-written page.
+
+The procedure is tested nightly by `.github/workflows/backup-restore.yml`, which takes a backup, destroys the original volume, restores into a fresh one, and asserts the row count matches. Run it on demand from the Actions tab ("Backup Restore" → Run workflow).
+
+**Backups may contain credentials** (operator hashes, WP app-passwords, Plesk/SMTP settings). Store them with restricted permissions (`chmod 0600`, which the script applies), in a location not served by the app, and rotate old copies on whatever cadence suits you. The nightly workflow uses throwaway data only — it does not back up or restore production.
 
 ## Notes
 
