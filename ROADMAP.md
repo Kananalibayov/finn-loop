@@ -125,7 +125,7 @@ capability 1 in [`PRODUCT-VISION.md`](./docs/PRODUCT-VISION.md).
 a token document — **never markup**. That is what makes a sanitizer unnecessary rather than
 merely absent, and it is the destination for the entire HTML-validation debt.
 
-- [ ] `SiteModel`, `Brand`, `DesignTokens`, `Page`, `Section`, `MediaRef` types
+- [x] `SiteModel`, `Brand`, `DesignTokens`, `Page`, `Section`, `MediaRef` types — **#139 (#144)**
 - [ ] Section registry, versioned: `hero`, `services`, `about`, `features`, `testimonials`,
       `gallery`, `faq`, `cta`, `contact` — 2 variants each, responsive and WCAG 2.2 AA by
       construction (24px targets, no drag-only interactions, focus never obscured,
