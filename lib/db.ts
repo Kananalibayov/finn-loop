@@ -729,7 +729,8 @@ export function saveEmailSettings(input: {
   smtpPass?: string;
   smtpFrom?: string;
   notifyOperatorEmail?: string;
-}): void {
+}): AppSettingsRow {
+  const conn = db();
   const current = getAppSettings() as Record<string, string> | null;
   const values: Record<string, string> = {
     smtp_host: input.smtpHost ?? current?.smtp_host ?? "",
@@ -743,14 +744,21 @@ export function saveEmailSettings(input: {
   } else {
     values.smtp_pass = current?.smtp_pass ?? "";
   }
-  db().prepare(
-    `UPDATE app_settings SET
-      smtp_host = @smtp_host, smtp_port = @smtp_port, smtp_user = @smtp_user,
-      smtp_pass = @smtp_pass, smtp_from = @smtp_from,
-      notify_operator_email = @notify_operator_email,
-      updated_at = @updated_at
-    WHERE id = 1`,
-  ).run({ ...values, updated_at: new Date().toISOString() });
+  conn
+    .prepare(
+      `INSERT INTO app_settings (id, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, notify_operator_email, updated_at)
+       VALUES (1, @smtp_host, @smtp_port, @smtp_user, @smtp_pass, @smtp_from, @notify_operator_email, @updated_at)
+       ON CONFLICT(id) DO UPDATE SET
+         smtp_host = excluded.smtp_host,
+         smtp_port = excluded.smtp_port,
+         smtp_user = excluded.smtp_user,
+         smtp_pass = excluded.smtp_pass,
+         smtp_from = excluded.smtp_from,
+         notify_operator_email = excluded.notify_operator_email,
+         updated_at = excluded.updated_at`,
+    )
+    .run({ ...values, updated_at: new Date().toISOString() });
+  return getAppSettings()!;
 }
 
 /** Branding helpers (issue #79: white-label). */
@@ -1319,7 +1327,8 @@ export function savePleskSettings(input: {
   pleskUrl?: string;
   pleskUser?: string;
   pleskPassword?: string;
-}): void {
+}): AppSettingsRow {
+  const conn = db();
   const current = getAppSettings();
   const values = {
     plesk_url: input.pleskUrl ?? current?.plesk_url ?? "",
@@ -1330,7 +1339,16 @@ export function savePleskSettings(input: {
   } else {
     (values as Record<string, string>).plesk_password = current?.plesk_password ?? "";
   }
-  db().prepare(
-    `UPDATE app_settings SET plesk_url = @plesk_url, plesk_user = @plesk_user, plesk_password = @plesk_password, updated_at = @updated_at WHERE id = 1`,
-  ).run({ ...values, updated_at: new Date().toISOString() });
+  conn
+    .prepare(
+      `INSERT INTO app_settings (id, plesk_url, plesk_user, plesk_password, updated_at)
+       VALUES (1, @plesk_url, @plesk_user, @plesk_password, @updated_at)
+       ON CONFLICT(id) DO UPDATE SET
+         plesk_url = excluded.plesk_url,
+         plesk_user = excluded.plesk_user,
+         plesk_password = excluded.plesk_password,
+         updated_at = excluded.updated_at`,
+    )
+    .run({ ...values, updated_at: new Date().toISOString() });
+  return getAppSettings()!;
 }
