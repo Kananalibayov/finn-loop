@@ -1,0 +1,341 @@
+{
+  "app/api/app/password/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/app/settings/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/branding/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/change-requests/[id]/apply/route.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "app/api/change-requests/[id]/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/clients/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/email-settings/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/email-test/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/export/single-html/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/export/static-zip/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/generate/route.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/api/login/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/operators/login/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/operators/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/plesk/provision/route.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/api/plesk/settings/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/plesk/test/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/portal/login/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/portal/projects/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/portal/requests/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/projects/[id]/connection/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/projects/[id]/nl-edit/apply/route.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/api/projects/[id]/nl-edit/route.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "app/api/projects/[id]/push-wp/route.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "app/api/projects/[id]/regenerate/route.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/api/templates/[id]/deliver/route.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/api/templates/from-scan/route.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/api/templates/from-screenshot/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/templates/route.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "app/api/uploads/logo/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/wp/connections/[id]/health-report/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/wp/connections/[id]/settings/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/wp/connections/[id]/sync-settings/route.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/api/wp/connections/[id]/validate-login-token/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/wp/connections/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/wp/pairing/generate/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/wp/pairing/register/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/wp/settings/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/wp/test/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/api/zip/route.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/clients/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "app/components/Sidebar.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/connections/[id]/manage/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/connections/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "app/generate/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/no-unescaped-entities": {
+      "count": 2
+    }
+  },
+  "app/login/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/onboard/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/operators/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "app/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/portal/login/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/portal/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/no-unescaped-entities": {
+      "count": 1
+    }
+  },
+  "app/projects/[id]/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 10
+    }
+  },
+  "app/projects/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "app/provision/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/requests/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "app/settings/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 12
+    }
+  },
+  "app/templates/[id]/deliver/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "app/templates/from-scan/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "app/templates/from-screenshot/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/no-unescaped-entities": {
+      "count": 2
+    }
+  },
+  "app/templates/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "docker-entrypoint.js": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 3
+    }
+  },
+  "lib/auth.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "lib/db.test.mts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "lib/db.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "lib/plesk.ts": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "lib/wp.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  }
+}
