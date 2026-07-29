@@ -22,3 +22,16 @@ export function escapeHtml(value: string): string {
       ] ?? character,
   );
 }
+
+export function safeHref(value: string): string {
+  const normalized = value.trim().replace(/[\s\u0000-\u001f\u007f]/gu, "");
+  const lower = normalized.toLowerCase();
+
+  if (
+    /^(?:https?:|mailto:|tel:)/.test(lower) ||
+    /^(?:\/(?!\/)|#)/.test(normalized)
+  ) {
+    return normalized;
+  }
+  return "#";
+}

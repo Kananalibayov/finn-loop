@@ -1,5 +1,5 @@
 import type { HeroContent } from "../../site-model.ts";
-import { escapeHtml, type RenderContext, type SectionRenderer } from "../types.ts";
+import { escapeHtml, safeHref, type RenderContext, type SectionRenderer } from "../types.ts";
 
 function tokenAttributes(ctx: RenderContext): string {
   const { color, font, typeScale, spacingUnit, radius, shadow, containerMax } = ctx.tokens;
@@ -29,7 +29,7 @@ export const heroCentered: SectionRenderer<HeroContent> = {
       ? `<p class="hero-centered__subheading">${escapeHtml(content.subheading)}</p>`
       : "";
     const cta = content.cta
-      ? `<a class="hero-centered__cta" href="${escapeHtml(content.cta.href)}">${escapeHtml(content.cta.label)}</a>`
+      ? `<a class="hero-centered__cta" href="${escapeHtml(safeHref(content.cta.href))}">${escapeHtml(content.cta.label)}</a>`
       : "";
     return `<section class="section hero hero-centered" data-section-instance="${escapeHtml(ctx.instanceId)}" ${tokenAttributes(ctx)}><div class="hero-centered__content"><h1>${escapeHtml(content.heading)}</h1>${subheading}${cta}</div></section>`;
   },
