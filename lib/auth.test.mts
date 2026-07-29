@@ -15,7 +15,12 @@ process.env.ADMIN_SESSION_SECRET =
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SignJWT } from "jose";
-import { requireRole } from "./auth.ts";
+import {
+  hashPassword,
+  legacyAdminCandidateHashes,
+  requireRole,
+  verifyPasswordAgainstHash,
+} from "./auth.ts";
 
 const secret = new TextEncoder().encode(process.env.ADMIN_SESSION_SECRET);
 
@@ -104,4 +109,56 @@ test("expired token fails", async () => {
     .setExpirationTime(Math.floor(Date.now() / 1000) - 300)
     .sign(secret);
   assert.equal(await requireRole(token, "admin"), null);
+});
+
+// ---------------------------------------------------------------------------
+// Issue #136 (GAP-LEDGER §8.2): legacyAdminCandidateHashes — the six candidate
+// policies of the env-credential retirement rule (AC-1).
+// ---------------------------------------------------------------------------
+
+const DB_PASSWORD = "db-password-123";
+const ENV_PASSWORD = "env-password-456";
+const dbHash = hashPassword(DB_PASSWORD);
+const envHash = hashPassword(ENV_PASSWORD);
+
+test("DB+env+0 operators: DB hash is the sole candidate", () => {
+  const candidates = legacyAdminCandidateHashes(dbHash, envHash, 0);
+  assert.deepEqual(candidates, [dbHash]);
+  assert.equal(verifyPasswordAgainstHash(DB_PASSWORD, candidates), true);
+  assert.equal(verifyPasswordAgainstHash(ENV_PASSWORD, candidates), false);
+});
+
+test("DB+env+operators present: DB hash is the sole candidate", () => {
+  const candidates = legacyAdminCandidateHashes(dbHash, envHash, 3);
+  assert.deepEqual(candidates, [dbHash]);
+  assert.equal(verifyPasswordAgainstHash(DB_PASSWORD, candidates), true);
+  assert.equal(verifyPasswordAgainstHash(ENV_PASSWORD, candidates), false);
+});
+
+test("no DB hash + env + 0 operators: env hash accepted (bootstrap window)", () => {
+  const candidates = legacyAdminCandidateHashes(null, envHash, 0);
+  assert.deepEqual(candidates, [envHash]);
+  assert.equal(verifyPasswordAgainstHash(ENV_PASSWORD, candidates), true);
+});
+
+test("no DB hash + env + operators present: no candidates, env rejected", () => {
+  const candidates = legacyAdminCandidateHashes(null, envHash, 1);
+  assert.deepEqual(candidates, []);
+  assert.equal(verifyPasswordAgainstHash(ENV_PASSWORD, candidates), false);
+});
+
+test("no hashes at all: no candidates", () => {
+  assert.deepEqual(legacyAdminCandidateHashes(null, null, 0), []);
+  assert.deepEqual(legacyAdminCandidateHashes(undefined, undefined, 0), []);
+  assert.equal(verifyPasswordAgainstHash(ENV_PASSWORD, []), false);
+});
+
+test("malformed selected hash: verification is false without throwing", () => {
+  const candidates = legacyAdminCandidateHashes("not-a-bcrypt-hash", envHash, 0);
+  assert.deepEqual(candidates, ["not-a-bcrypt-hash"]);
+  let result: boolean | undefined;
+  assert.doesNotThrow(() => {
+    result = verifyPasswordAgainstHash(DB_PASSWORD, candidates);
+  });
+  assert.equal(result, false);
 });
