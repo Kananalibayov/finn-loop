@@ -1,4 +1,5 @@
 # CI-only. Throwaway credentials for containers that live for one job. Never deploy from this file.
+# wp-bootstrap installs WordPress and writes a throwaway application password to wp-cli-out.
 services:
   app:
     build:
@@ -13,7 +14,7 @@ services:
       OPENAI_API_KEY: sk-ci-throwaway
       OPENAI_BASE_URL: http://openai-mock:4010/v1
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
 
   openai-mock:
     image: node:22-alpine
@@ -38,5 +39,49 @@ services:
       WORDPRESS_DB_USER: wp
       WORDPRESS_DB_PASSWORD: ci-throwaway
       WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_CONFIG_EXTRA: "define('WP_ENVIRONMENT_TYPE','local');"
     ports:
-      - "8080:80"
+      - "${WP_PORT:-8080}:80"
+    volumes:
+      - wordpress-data:/var/www/html
+
+  wp-bootstrap:
+    image: wordpress:cli
+    depends_on:
+      - wordpress
+    user: "0:0"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: ci-throwaway
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wordpress-data:/var/www/html
+      - wp-cli-out:/out
+    entrypoint:
+      - sh
+      - -lc
+      - |
+        set -eu
+        for i in $(seq 1 60); do
+          if wp core is-installed --allow-root >/dev/null 2>&1; then
+            break
+          fi
+          if wp core install --allow-root \
+            --url=http://localhost:8080 \
+            --title=CI \
+            --admin_user=admin \
+            --admin_password=ci-throwaway \
+            --admin_email=ci@example.test >/dev/null 2>&1; then
+            break
+          fi
+          sleep 5
+        done
+        wp core is-installed --allow-root
+        if [ ! -s /out/app-password ]; then
+          wp user application-password create admin ci-smoke --allow-root --porcelain > /out/app-password
+        fi
+
+volumes:
+  wordpress-data:
+  wp-cli-out:
