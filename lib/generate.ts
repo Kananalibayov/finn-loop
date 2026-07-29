@@ -24,6 +24,7 @@ export interface GenerateOptions {
   input: BusinessInput;
   mode: Mode;
   themeId: import("@/lib/themes").ThemeId;
+  theme?: import("@/lib/themes").Theme;
 }
 
 /** Generate all pages for the given input. Returns the pages + theme used. */
@@ -33,7 +34,7 @@ export async function generatePages(
   const { input, mode, themeId } = opts;
   const client = getOpenAI(); // throws clearly if OPENAI_API_KEY is missing
   const model = getEffectiveGenerationModel(); // AC-5 (issue #46): DB/env/default
-  const theme = getTheme(themeId);
+  const theme = opts.theme ?? getTheme(themeId);
   const pages: PageKey[] = mode === "home" ? ["home"] : ALL_PAGES;
 
   const out: GeneratedPage[] = [];
