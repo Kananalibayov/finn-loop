@@ -46,9 +46,6 @@ RUN npm run build
 # example does the same mkdir -p to handle the empty-public case).
 RUN mkdir -p /app/public
 
-# better-sqlite3 ships prebuilt binaries; if the alpine/musl prebuild didn't
-# match, compile the native binding now against the exact runtime ABI.
-RUN npm rebuild better-sqlite3
 
 ############################
 # Stage 3: runner (final image)
