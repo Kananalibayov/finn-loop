@@ -17,6 +17,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const featuresAlternating: SectionRenderer<FeaturesContent> = {
   type: "features",
   variant: "alternating",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<ul class="features-alternating__items">${content.items.map((item, index) => `<li class="features-alternating__item"><h3>${escapeHtml(item.title)}</h3>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}<span class="features-alternating__index" aria-hidden="true">${index + 1}</span></li>`).join("")}</ul>`;

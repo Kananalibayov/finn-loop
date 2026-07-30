@@ -17,6 +17,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const statsRow: SectionRenderer<StatsContent> = {
   type: "stats",
   variant: "row",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<dl class="stats-row__items">${content.items.map((item) => `<div class="stats-row__item"><dt class="stats-row__value">${escapeHtml(item.value)}</dt><dd class="stats-row__label">${escapeHtml(item.label)}</dd></div>`).join("")}</dl>`;

@@ -17,6 +17,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const featuresGrid: SectionRenderer<FeaturesContent> = {
   type: "features",
   variant: "grid",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<ul class="features-grid__items">${content.items.map((item) => `<li class="features-grid__item"><h3>${escapeHtml(item.title)}</h3>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}</li>`).join("")}</ul>`;

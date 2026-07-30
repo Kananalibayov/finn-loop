@@ -51,6 +51,7 @@ function formBlock(content: ContactContent, ctx: RenderContext): string {
 export const contactStacked: SectionRenderer<ContactContent> = {
   type: "contact",
   variant: "stacked",
+  css: "",
   html(content, ctx) {
     const text = textBlock(content);
     const form = formBlock(content, ctx);

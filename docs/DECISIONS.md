@@ -33,3 +33,30 @@ never sees (clean checkout). Chosen: verify in a detached clean worktree per bra
 this matches CI semantics exactly — and leave `eslint.config.mjs` alone. Rejected:
 adding ignore patterns to the repo's eslint config for local scratch dirs (changes the
 lint surface every contributor inherits to solve a local hygiene problem).
+
+## 2026-07-30 — CSS lives with the variant; aggregation at render time (#206)
+
+Chosen: a required static `css` member on `SectionRenderer`, aggregated by
+`collectCss(used)` in registry order into the single stylesheet beside the base
+layer. Rejected: one global stylesheet (drifts from variants silently; becomes
+the next `registry.ts` conflict funnel). `container-type: inline-size` is
+declared per variant root rather than once on `.section` in the base layer —
+AC-10 pins it in the variant's own block, and keeping the query container next
+to the rules that query it makes the convention copy-proof for future variants.
+
+## 2026-07-30 — Required `css` with 26 honest empty stubs
+
+Making `css` required (so tsc fails when a new variant forgets it — verified:
+TS2741) forced a member on all 28 variants. Hero got real CSS as the reference;
+the other 26 got `css: ""`. An empty string is an honest "not styled yet", not
+a fake: `collectCss` skips it, no success is reported, and per-section CSS is
+the explicit next roadmap line. Rejected: optional member (kills the AC-1
+compile-time guard) and filling all 26 in this PR (unreviewable bulk).
+
+## 2026-07-30 — Base layer styles the page shell too
+
+`BASE_CSS` gained minimal `site-header`/`site-brand`/`site-nav`/`site-footer`
+rules beyond the issue's listed contents. The shell (#209) had just landed;
+a styled page with an unstyled header is visibly broken, and the header is a
+page-level (not section-level) concern, which is exactly the base layer's job.
+Recorded here because it is a small, deliberate extension of the card.

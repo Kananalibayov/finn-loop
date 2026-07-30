@@ -17,6 +17,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const pricingCards: SectionRenderer<PricingContent> = {
   type: "pricing",
   variant: "cards",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const cards = content.plans.length === 0

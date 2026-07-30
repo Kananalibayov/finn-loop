@@ -24,6 +24,27 @@ function tokenAttributes(ctx: RenderContext): string {
 export const heroSplit: SectionRenderer<HeroContent> = {
   type: "hero",
   variant: "split",
+  css: `
+.hero-split { container-type: inline-size; }
+.hero-split__content { display: grid; gap: var(--space-3); }
+@container (min-width: 40rem) {
+  .hero-split__content { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+}
+.hero-split__subheading { color: var(--color-muted); font-size: var(--step-1); }
+.hero-split__cta {
+  display: inline-block;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  font-weight: 600;
+  justify-self: start;
+}
+.hero-split__cta:hover { background: var(--color-primary-hover); }
+`.trim(),
   html(content, ctx) {
     const subheading = content.subheading
       ? `<p class="hero-split__subheading">${escapeHtml(content.subheading)}</p>`

@@ -17,6 +17,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const servicesList: SectionRenderer<ServicesContent> = {
   type: "services",
   variant: "list",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<ul class="services-list__items">${content.items.map((item) => `<li class="services-list__item"><h3>${escapeHtml(item.title)}</h3>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}${item.price ? `<p class="services-list__price">${escapeHtml(item.price)}</p>` : ""}</li>`).join("")}</ul>`;

@@ -28,6 +28,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const ctaCentered: SectionRenderer<CtaContent> = {
   type: "cta",
   variant: "centered",
+  css: "",
   html(content, ctx) {
     const subheading = content.subheading
       ? `<p class="cta-centered__subheading">${escapeHtml(content.subheading)}</p>`

@@ -17,6 +17,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const statsGrid: SectionRenderer<StatsContent> = {
   type: "stats",
   variant: "grid",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<dl class="stats-grid__items">${content.items.map((item) => `<div class="stats-grid__item"><dt class="stats-grid__value">${escapeHtml(item.value)}</dt><dd class="stats-grid__label">${escapeHtml(item.label)}</dd></div>`).join("")}</dl>`;

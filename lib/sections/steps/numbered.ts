@@ -17,6 +17,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const stepsNumbered: SectionRenderer<StepsContent> = {
   type: "steps",
   variant: "numbered",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0

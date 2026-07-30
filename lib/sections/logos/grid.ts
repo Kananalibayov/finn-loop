@@ -37,6 +37,7 @@ function renderLogo(image: LogosContent["images"][number], className: string): s
 export const logosGrid: SectionRenderer<LogosContent> = {
   type: "logos",
   variant: "grid",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const list =

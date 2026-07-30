@@ -17,6 +17,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const testimonialsCards: SectionRenderer<TestimonialsContent> = {
   type: "testimonials",
   variant: "cards",
+  css: "",
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<ul class="testimonials-cards__items">${content.items.map((item) => `<li class="testimonials-cards__item"><blockquote>${escapeHtml(item.quote)}</blockquote><cite>${escapeHtml(item.author)}</cite>${item.role ? `<p>${escapeHtml(item.role)}</p>` : ""}</li>`).join("")}</ul>`;
