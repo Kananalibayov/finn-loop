@@ -45,6 +45,12 @@ function db(): Database.Database {
   // Ensure the parent directory exists so better-sqlite3 can create the file.
   mkdirSync(dirname(DB_FILE), { recursive: true });
   const conn = new Database(DB_FILE);
+  // Phase 0.9 (#231): WAL so readers never block behind a writer, and a busy
+  // timeout so a locked writer waits instead of erroring. journal_mode is
+  // persistent on the database file; busy_timeout is per-connection, so it
+  // must be set on every open — this is the app's only read-write open path.
+  conn.pragma("journal_mode = WAL");
+  conn.pragma("busy_timeout = 5000");
   // AC-2: sites table. IF NOT EXISTS so re-runs are idempotent (NG-4).
   // AC-1 (issue #16): site_group_id groups a site with its regenerated versions.
   conn.exec(`
@@ -1366,4 +1372,16 @@ export function savePleskSettings(input: {
     )
     .run({ ...values, updated_at: new Date().toISOString() });
   return getAppSettings()!;
+}
+
+/**
+ * Phase 0.9 (#231): pragma values of the app-opened handle, so tests (and
+ * later the health route) can prove WAL and the busy timeout are actually in
+ * force on the connection the app uses — not merely present in source.
+ */
+export function getDbPragmas(): { journalMode: string; busyTimeout: number } {
+  const conn = db();
+  const journalMode = String(conn.pragma("journal_mode", { simple: true })).toLowerCase();
+  const busyTimeout = Number(conn.pragma("busy_timeout", { simple: true }));
+  return { journalMode, busyTimeout };
 }
