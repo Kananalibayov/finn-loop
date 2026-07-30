@@ -1,7 +1,7 @@
 import type { Page, SiteModel } from "../site-model.ts";
 import { isSiteModel } from "../site-model.ts";
 import { getRenderer, sectionInstanceId } from "../sections/registry.ts";
-import { escapeHtml } from "../sections/types.ts";
+import { escapeHtml, safeHref } from "../sections/types.ts";
 import { themeJson } from "./theme-json.ts";
 import { tokensToCss } from "./tokens-css.ts";
 
@@ -26,7 +26,13 @@ function renderPage(page: Page, model: SiteModel): string {
     ? `<meta name="description" content="${escapeHtml(page.seo.description)}">`
     : "";
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(page.seo.title)}</title>${description}<link rel="stylesheet" href="/style.css"></head><body>${sections.join("")}</body></html>`;
+  const nav = model.nav.length === 0
+    ? ""
+    : `<nav class="site-nav">${model.nav.map((item) => `<a href="${escapeHtml(safeHref(item.href))}">${escapeHtml(item.label)}</a>`).join("")}</nav>`;
+  const header = `<header class="site-header"><a class="site-brand" href="/">${escapeHtml(model.meta.businessName)}</a>${nav}</header>`;
+  const footer = `<footer class="site-footer">${escapeHtml(model.meta.businessName)}</footer>`;
+
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(page.seo.title)}</title>${description}<link rel="stylesheet" href="/style.css"></head><body>${header}<main>${sections.join("")}</main>${footer}</body></html>`;
 }
 
 export function renderHtml(model: SiteModel): RenderedSite {
