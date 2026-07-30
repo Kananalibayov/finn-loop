@@ -1,4 +1,6 @@
 import type { SectionType } from "../site-model.ts";
+import { aboutNarrative } from "./about/narrative.ts";
+import { aboutSplit } from "./about/split.ts";
 import { contactSplit } from "./contact/split.ts";
 import { contactStacked } from "./contact/stacked.ts";
 import { ctaBanner } from "./cta/banner.ts";
@@ -38,7 +40,12 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
     grid: galleryGrid as SectionRenderer<unknown>,
     columns: galleryColumns as SectionRenderer<unknown>,
   },
+  about: {
+    narrative: aboutNarrative as SectionRenderer<unknown>,
+    split: aboutSplit as SectionRenderer<unknown>,
+  },
 };
+
 
 
 
