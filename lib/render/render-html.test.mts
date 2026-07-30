@@ -116,3 +116,46 @@ test("renderHtml returns the shared stylesheet and theme data", () => {
   assert.equal(result.stylesheet, tokensToCss(tokens));
   assert.deepEqual(result.themeJson, themeJson(tokens));
 });
+
+function modelWithNav(): SiteModel {
+  const model = modelWithPages();
+  model.meta.businessName = 'A & B "<script>alert(1)</script>"';
+  model.nav = [
+    { label: "Home", href: "/" },
+    { label: 'Tom & "Jerry"', href: "/about" },
+    { label: "Evil", href: "javascript:alert(1)" },
+  ];
+  return model;
+}
+
+test("every page has exactly one header, main and footer landmark", () => {
+  for (const page of renderHtml(modelWithPages()).pages) {
+    assert.equal((page.html.match(/<header/g) ?? []).length, 1);
+    assert.equal((page.html.match(/<main>/g) ?? []).length, 1);
+    assert.equal((page.html.match(/<footer/g) ?? []).length, 1);
+    assert.match(page.html, /<\/head><body><header[^>]*>.*<\/header><main>.*<\/main><footer[^>]*>.*<\/footer><\/body><\/html>$/);
+  }
+});
+
+test("header links the escaped business name to / and footer repeats it", () => {
+  const html = renderHtml(modelWithNav()).pages[0].html;
+  assert.ok(html.includes('<a class="site-brand" href="/">A &amp; B &quot;&lt;script&gt;'));
+  assert.ok(!html.includes("<script"));
+  const footerStart = html.indexOf("<footer");
+  assert.ok(html.slice(footerStart).includes("A &amp; B &quot;&lt;script&gt;"));
+});
+
+test("empty nav renders no nav element at all", () => {
+  const html = renderHtml(modelWithPages()).pages[0].html;
+  assert.ok(!html.includes("<nav"));
+});
+
+test("nav entries are escaped and unsafe hrefs neutralised", () => {
+  const html = renderHtml(modelWithNav()).pages[0].html;
+  const nav = html.slice(html.indexOf("<nav"), html.indexOf("</nav>"));
+  assert.ok(nav.includes('href="/"'));
+  assert.ok(nav.includes("Tom &amp; &quot;Jerry&quot;"));
+  assert.ok(!nav.includes("javascript:"));
+  assert.ok(nav.includes('href="#"'));
+  assert.equal((nav.match(/<a /g) ?? []).length, 3);
+});
