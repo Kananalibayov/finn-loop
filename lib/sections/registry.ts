@@ -1,4 +1,6 @@
 import type { SectionType } from "../site-model.ts";
+import { contactSplit } from "./contact/split.ts";
+import { contactStacked } from "./contact/stacked.ts";
 import { featuresAlternating } from "./features/alternating.ts";
 import { featuresGrid } from "./features/grid.ts";
 import { heroCentered } from "./hero/centered.ts";
@@ -19,6 +21,10 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
   features: {
     grid: featuresGrid as SectionRenderer<unknown>,
     alternating: featuresAlternating as SectionRenderer<unknown>,
+  },
+  contact: {
+    stacked: contactStacked as SectionRenderer<unknown>,
+    split: contactSplit as SectionRenderer<unknown>,
   },
 };
 
