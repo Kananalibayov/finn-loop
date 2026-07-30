@@ -15,9 +15,10 @@
 //  1. The stylesheet is inlined into a <style> block. Real delivery serves it as /style.css
 //     (renderHtml emits the <link>), but a standalone preview response has nowhere to serve
 //     that file from. The CSS bytes are identical.
-//  2. Content is a hand-written fixture. write() does not exist yet, so nothing can generate
-//     copy — this shows the RENDERING, not AI-authored content. Do not read it as proof that
-//     content generation works.
+//  2. Content is a hand-written fixture, deliberately. This route shows RENDERING with fixed
+//     input, which makes it free to refresh and stable to compare against.
+//     For AI-authored content through the real pipeline (plan -> write -> render -> validate),
+//     use `/api/generate-v2` instead — that one costs model calls per request.
 
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, requireRole } from "@/lib/auth";
