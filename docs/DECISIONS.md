@@ -60,3 +60,25 @@ rules beyond the issue's listed contents. The shell (#209) had just landed;
 a styled page with an unstyled header is visibly broken, and the header is a
 page-level (not section-level) concern, which is exactly the base layer's job.
 Recorded here because it is a small, deliberate extension of the card.
+
+## 2026-07-30 — `structure/links` scans `<a>` tags only; `/` is always allowed (#195)
+
+Every rendered page carries `<link rel="stylesheet" href="/style.css">` and a
+brand link `href="/"`. Reading the card's "every internal href" literally —
+all `href` attributes, no root exception — would flag both on every valid page
+and make AC-1 unpassable. Chosen: extract hrefs from `<a>` tags only (the
+stylesheet is an asset, not navigation) and allow literal `/` plus `/<slug>`
+for each rendered page. This interpretation is forced by the card's own
+valid-fixture requirement, not a convenience weakening: the gate still catches
+the operator-relevant defect class (a nav item or CTA pointing at a slug that
+no page serves, e.g. `/nope`).
+
+## 2026-07-30 — `sections/instance-ids`: missing ids individually, count only when none missing (#195)
+
+A naive "check presence AND count" reports two violations for one dropped
+section (its id is missing AND the total is one short), burying the actionable
+fact — *which* section dropped. Chosen: report each missing expected id by
+name; report a count mismatch only when all expected ids are present but the
+total differs (the duplication/extra-markup case). A dropped section yields
+exactly one violation naming its id; a duplicated section yields exactly one
+violation giving found-vs-expected counts.
