@@ -97,22 +97,57 @@ step and watching the pipeline go red.
 > wrong site, report a fabricated page count, mark itself completed, and email the client
 > that it is live. This is the single most expensive mistake available in this codebase.
 
-- [ ] **1.** Change-request state machine: conditional `UPDATE … WHERE status IN (…)` that
-      checks `changes`; no transition without an observed row update
-- [ ] **2.** Apply route per-page failure accounting: no fabricated counts, no swallowed push
-      failures, no "completed" email on partial application
-- [ ] **3.** Group-head / version resolution: `sites` gets `head_version_id`; queries resolve
-      "which version is live" explicitly
-- [ ] **4.** `regenerateProject` carries `client_id`, `wp_connection_id`, `wp_page_ids` forward
-- [ ] **4b.** **A test asserting client B gets 403 for client A's `projectId`.** The isolation
-      check at `portal/requests/route.ts:47` is correct by inspection but has *never
-      executed*, because `client_id` is always NULL — it becomes load-bearing for the first
-      time at step 5. Write the test before, not after
-- [ ] **5.** *Only now:* `PATCH /api/projects/[id]/client` + project-page picker
+- [x] **1.** Change-request state machine: conditional `UPDATE … WHERE status IN (…)` that
+      checks `changes`; no transition without an observed row update — **#155 (#163)**
+- [x] **2.** Apply route per-page failure accounting: no fabricated counts, no swallowed push
+      failures, no "completed" email on partial application — **#156 (#168)**
+- [x] ~~**3.** Group-head / version resolution~~ · ~~**4.** `regenerateProject` carries ids
+      forward~~ · ~~**4b.** isolation test~~ · ~~**5.** `PATCH …/client`~~ — **superseded by
+      Phase 0.9.** Steps 3–5 were a careful retrofit of versioning and tenancy *onto the
+      legacy blob storage*; Phase 0.9 replaces that storage, so building the retrofit first
+      is pure waste. Steps 1–2 stand on their own (honest state transitions, honest
+      accounting) and are done. Do not build steps 3–5.
 
-**Demo:** file two consecutive change requests on one project; both apply, neither reverts
-the other, the portal keeps showing the right site, and a forced mid-apply failure produces
-an honest error rather than a completion email.
+---
+
+## Phase 0.9 — Foundation rebuild · *before `write()` and before the generator migration*
+
+**The human's decision (2026-07-30):** the app is not live and the data is disposable, so fix
+the foundation now, while it costs nothing to change. Do not carefully retrofit the legacy
+tables. The five items below; the implementing model owns the design details and records them
+in `docs/DECISIONS.md`.
+
+> **Why:** `sites` stores each site as opaque `input_json`/`pages_json` text blobs, while
+> Phase 1 built a structured, validated `SiteModel`. Three committed capabilities are
+> *impossible* on blob storage — section-level editing that patches model nodes, version
+> diff/revert, and idempotent re-push that respects client edits. And tenancy today is a
+> nullable, FK-less `client_id` bolted on via `ALTER TABLE`, so isolation depends on every
+> query remembering to filter — the root of the ~35-defect landmine above. Replace the
+> ground, delete the landmine, instead of tiptoeing around it.
+
+- [ ] **Versioned SiteModel storage.** A `site_model_versions` table: one immutable row per
+      version (`isSiteModel`-validated JSON), project row carries a `head_version_id`
+      pointer. New generation writes here; a version is never mutated, only superseded.
+      Legacy `pages_json` projects stay readable exactly as today — no destructive migration,
+      old projects render until retired.
+- [ ] **Tenancy as a hard wall, not a column.** Client ownership `NOT NULL` + real foreign
+      key (`ON DELETE RESTRICT`) on the new tables, and one scoped data-access layer (all
+      reads/writes go through an accessor that *requires* the tenant) so an unscoped query is
+      unwritable, not merely forbidden. Includes the client-B-gets-403 isolation test from
+      old step 4b. This deletes the landmine class rather than defusing it bomb by bomb.
+- [ ] **One identity model.** A single principal/session shape for operators and portal
+      clients; `verifySessionRole` stops defaulting to `admin`; `editor`/`viewer` enforced
+      server-side (folds the two Phase 0.5 auth lines in). Auth boundary files still require
+      a stated threat model per the standing rules.
+- [ ] **SQLite WAL + `busy_timeout`.** The one-line concurrency fix, now.
+- [ ] **DB-backed job queue for generation and delivery.** Long LLM calls move out of HTTP
+      handlers into observable, resumable job rows (status, attempts, last error). No new
+      dependency unless justified in `docs/DECISIONS.md`.
+
+**Demo:** two clients, one project each; client B's request for client A's project returns
+403 by test; a change request produces version N+1 with N intact and revertable; a mid-apply
+failure leaves an honest job record and no completion email; `PRAGMA journal_mode` returns
+`wal`.
 
 ---
 
