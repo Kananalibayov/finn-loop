@@ -3,6 +3,8 @@ import { servicesGrid } from "./services/grid.ts";
 import { servicesList } from "./services/list.ts";
 import { heroCentered } from "./hero/centered.ts";
 import { heroSplit } from "./hero/split.ts";
+import { statsGrid } from "./stats/grid.ts";
+import { statsRow } from "./stats/row.ts";
 import { REGISTRY_VERSION, type SectionRenderer } from "./types.ts";
 
 const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unknown>>>> = {
@@ -13,6 +15,10 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
   services: {
     grid: servicesGrid as SectionRenderer<unknown>,
     list: servicesList as SectionRenderer<unknown>,
+  },
+  stats: {
+    row: statsRow as SectionRenderer<unknown>,
+    grid: statsGrid as SectionRenderer<unknown>,
   },
 };
 
