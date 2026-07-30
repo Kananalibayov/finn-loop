@@ -10,6 +10,35 @@ Current state: [`docs/STATE-OF-THE-BUILD.md`](./docs/STATE-OF-THE-BUILD.md).
 - Each phase is a chain of one-day issues in the existing `AC-N` / `NG-N` spec format.
 - Adding a feature that is not in a phase below requires updating the north star first.
 
+## Standing product mandate · *granted by the human, 2026-07-30*
+
+The implementing model holds **product-design authority**, not just execution authority. The
+human's words: the initial build may not be the best; the model understands the direction and
+may decide how this app best aligns with it — including rearranging features, redesigning the
+operator UI to a 2026 standard, and adding what enterprise-grade software of this kind needs.
+
+Within these boundaries, "not on the roadmap yet" is NOT a reason to skip something:
+
+- **Direction is fixed, shape is yours.** NORTH-STAR.md §1–§4 (what this product is, who it
+  serves, the quality bar) and PRODUCT-VISION.md still bind. You may reshape *how* the app
+  gets there — navigation, screens, flows, feature grouping, what exists that shouldn't, what
+  doesn't exist that should (audit trails, empty/loading/error states everywhere, bulk
+  operations, search, keyboard support, sensible defaults — the texture of enterprise
+  software).
+- **Write it down first, then build.** A self-granted feature still starts as a one-line
+  roadmap addition in the phase where it belongs, in the same PR as the work or ahead of it,
+  citing this mandate. The record is the point: the human reviews direction *after the fact*
+  through ROADMAP diffs, `docs/DECISIONS.md` and `docs/BUILD-LOG.md`, so an unrecorded
+  feature is a violation even if it is good.
+- **Unchanged hard limits:** the enforcement spine (gates, CI, tests, lint) is not yours to
+  weaken; `lib/auth.ts`/`middleware.ts` still require a stated threat model; product intent
+  that is genuinely the human's — pricing, legal claims, what is promised to clients — still
+  goes to a `needs-human-review` issue with a recommendation, and you continue with other
+  work.
+- **Operator UI carries the same bar as generated sites:** WCAG 2.2 AA, keyboard reachable,
+  visible focus, honest empty/error states, no fabricated success indicators. The dashboard
+  is the product the operator buys; it is not exempt from NORTH-STAR §4.
+
 > Supersedes the previous roadmap, whose issue numbering had diverged from reality
 > (it listed #15–#17 as health/Elementor/Beaver; actual work ran to #93).
 
