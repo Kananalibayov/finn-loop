@@ -172,11 +172,17 @@ in `docs/DECISIONS.md`.
 > query remembering to filter — the root of the ~35-defect landmine above. Replace the
 > ground, delete the landmine, instead of tiptoeing around it.
 
-- [ ] **Versioned SiteModel storage.** A `site_model_versions` table: one immutable row per
+- [x] **Versioned SiteModel storage.** A `site_model_versions` table: one immutable row per
       version (`isSiteModel`-validated JSON), project row carries a `head_version_id`
       pointer. New generation writes here; a version is never mutated, only superseded.
       Legacy `pages_json` projects stay readable exactly as today — no destructive migration,
-      old projects render until retired.
+      old projects render until retired. **Done: #236** (storage + accessors, FK-enforced,
+      IMMEDIATE-transaction numbering; design record in `docs/DECISIONS.md`).
+- [x] **Version history visible in the app** *(standing mandate, wire-as-you-go)*:
+      `GET /api/projects/[id]/versions` (metadata + head pointer, `requireRole("editor")`)
+      and a Versions card on the project screen — loading / error-with-Retry / honest
+      legacy empty state / newest-first list with the head marked `current`. Read-only on
+      purpose; revert, diff, and per-version preview are separate future lines. **Done: #238.**
 - [ ] **Tenancy as a hard wall, not a column.** Client ownership `NOT NULL` + real foreign
       key (`ON DELETE RESTRICT`) on the new tables, and one scoped data-access layer (all
       reads/writes go through an accessor that *requires* the tenant) so an unscoped query is
@@ -186,7 +192,9 @@ in `docs/DECISIONS.md`.
       clients; `verifySessionRole` stops defaulting to `admin`; `editor`/`viewer` enforced
       server-side (folds the two Phase 0.5 auth lines in). Auth boundary files still require
       a stated threat model per the standing rules.
-- [ ] **SQLite WAL + `busy_timeout`.** The one-line concurrency fix, now.
+- [x] **SQLite WAL + `busy_timeout`.** The one-line concurrency fix, now. **Done: #232**
+      (`journal_mode=WAL`, `busy_timeout=5000` on the app's only open path, proven by
+      `lib/db-wal.test.mts`; `foreign_keys=ON` added with #236).
 - [ ] **DB-backed job queue for generation and delivery.** Long LLM calls move out of HTTP
       handlers into observable, resumable job rows (status, attempts, last error). No new
       dependency unless justified in `docs/DECISIONS.md`.
