@@ -17,7 +17,23 @@ function tokenAttributes(ctx: RenderContext): string {
 export const servicesList: SectionRenderer<ServicesContent> = {
   type: "services",
   variant: "list",
-  css: "",
+  css: `
+.services-list { container-type: inline-size; }
+.services-list__items { list-style: none; padding-inline-start: 0; }
+.services-list__item {
+  padding-block: var(--space-3);
+  border-block-end: 1px solid var(--color-border);
+}
+.services-list__item:first-child { border-block-start: 1px solid var(--color-border); }
+.services-list__item > * + * { margin-block-start: var(--space-1); }
+.services-list__price { color: var(--color-muted); font-weight: 600; }
+@container (min-width: 40rem) {
+  .services-list__item { display: flex; align-items: baseline; gap: var(--space-2); }
+  .services-list__item > * + * { margin-block-start: 0; }
+  .services-list__item h3 { margin-inline-end: auto; }
+  .services-list__price { color: var(--color-primary); }
+}
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<ul class="services-list__items">${content.items.map((item) => `<li class="services-list__item"><h3>${escapeHtml(item.title)}</h3>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}${item.price ? `<p class="services-list__price">${escapeHtml(item.price)}</p>` : ""}</li>`).join("")}</ul>`;

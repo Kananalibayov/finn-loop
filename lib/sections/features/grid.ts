@@ -17,7 +17,24 @@ function tokenAttributes(ctx: RenderContext): string {
 export const featuresGrid: SectionRenderer<FeaturesContent> = {
   type: "features",
   variant: "grid",
-  css: "",
+  css: `
+.features-grid { container-type: inline-size; }
+.features-grid__items {
+  list-style: none;
+  padding-inline-start: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+}
+.features-grid__item {
+  background: var(--color-surface);
+  border-block-start: 2px solid var(--color-accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-3);
+}
+.features-grid__item > * + * { margin-block-start: var(--space-2); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<ul class="features-grid__items">${content.items.map((item) => `<li class="features-grid__item"><h3>${escapeHtml(item.title)}</h3>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}</li>`).join("")}</ul>`;
