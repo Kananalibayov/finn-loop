@@ -24,7 +24,32 @@ function tokenAttributes(ctx: RenderContext): string {
 export const aboutSplit: SectionRenderer<AboutContent> = {
   type: "about",
   variant: "split",
-  css: "",
+  css: `
+.about-split { container-type: inline-size; }
+.about-split__body-column > * + * { margin-block-start: var(--space-2); }
+.about-split__cta {
+  display: inline-block;
+  margin-block-start: var(--space-2);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  font-weight: 600;
+}
+.about-split__cta:hover { background: var(--color-primary-hover); }
+@container (min-width: 40rem) {
+  .about-split {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: var(--space-4);
+    align-items: start;
+  }
+  .about-split > * { max-inline-size: none; margin-inline: 0; }
+}
+`.trim(),
   html(content, ctx) {
     const body = content.body
       .map((paragraph) => `<p class="about-split__body">${escapeHtml(paragraph)}</p>`)
