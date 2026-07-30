@@ -32,14 +32,29 @@ Fix only the named must-fix items, re-run the checks, push, remove the label, co
 **(b) An issue is ready for me:**
 
 ```bash
-gh issue list --state open --label "tier:t2" --label agent-ready \
-  --search "no:assignee -label:blocked" --json number,title
+gh issue list --state open --label agent-ready \
+  --search "no:assignee -label:blocked" --json number,title,body
 ```
 
-Lowest number first. Continue to §1.
+Take the **lowest number** whose `## Files In Scope` mentions none of these paths, and which
+does **not** carry `needs-approval`:
 
-**(c) Nothing matches** → say the T2 queue is empty and end. Never take a `tier:t1` or
-`tier:t3` issue. Never invent work.
+```
+lib/auth.ts  middleware.ts  .github/workflows/  .zcode/skills/  .github/CODEOWNERS
+AGENTS.md  ROADMAP.md  docs/NORTH-STAR.md  docs/AGENT-TIERS.md  docs/PIPELINE.md
+docs/GAP-LEDGER.md  docs/PRODUCT-VISION.md
+```
+
+Continue to §1.
+
+**There is no longer a `tier:` filter here, and that is deliberate.** See the same note in
+[`finn-t1`](../finn-t1/SKILL.md) §0(b): `tier:tN` was model-assigned at spec time and kept being
+wrong, while the path list above — the one `finn-gate.yml` actually holds on at merge — plus
+`needs-approval` are the real gates. Keeping a `tier:` filter on top of them only starved the
+queue.
+
+**(c) Nothing matches** → say the queue is empty and end. Never take an issue that trips the
+path list or carries `needs-approval`. Never invent work.
 
 ---
 
