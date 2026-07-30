@@ -7,6 +7,8 @@ import { ctaBanner } from "./cta/banner.ts";
 import { ctaCentered } from "./cta/centered.ts";
 import { featuresAlternating } from "./features/alternating.ts";
 import { featuresGrid } from "./features/grid.ts";
+import { faqAccordion } from "./faq/accordion.ts";
+import { faqList } from "./faq/list.ts";
 import { galleryColumns } from "./gallery/columns.ts";
 import { galleryGrid } from "./gallery/grid.ts";
 import { heroCentered } from "./hero/centered.ts";
@@ -79,6 +81,10 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
   steps: {
     numbered: stepsNumbered as SectionRenderer<unknown>,
     timeline: stepsTimeline as SectionRenderer<unknown>,
+  },
+  faq: {
+    accordion: faqAccordion as SectionRenderer<unknown>,
+    list: faqList as SectionRenderer<unknown>,
   },
 };
 
