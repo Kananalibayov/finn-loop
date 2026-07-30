@@ -27,6 +27,15 @@ type ConnectionOption = {
   apiUrl: string;
 };
 
+/** Phase 0.9: one row of SiteModel version metadata (never the model itself). */
+type VersionMeta = {
+  id: number;
+  project_id: number;
+  version_number: number;
+  source: string;
+  created_at: string;
+};
+
 type Status = "loading" | "ready" | "not-found" | "error";
 
 export default function ProjectPreviewPage() {
@@ -63,6 +72,13 @@ export default function ProjectPreviewPage() {
   const [nlPreview, setNlPreview] = useState<string | null>(null);
   const [nlEditing, setNlEditing] = useState(false);
   const [nlApplying, setNlApplying] = useState(false);
+
+  // Phase 0.9: version history state. versions===null means "still loading"
+  // (or not yet attempted); an empty array is the honest legacy state.
+  const [versions, setVersions] = useState<VersionMeta[] | null>(null);
+  const [headVersionId, setHeadVersionId] = useState<number | null>(null);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
+  const [versionsReload, setVersionsReload] = useState(0);
 
   function setEditField<K extends keyof BusinessInput>(key: K, value: BusinessInput[K]) {
     setEditInput((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -119,6 +135,34 @@ export default function ProjectPreviewPage() {
       cancelled = true;
     };
   }, []);
+
+  // Phase 0.9: load the SiteModel version history. Independent of the project
+  // fetch so a versions failure cannot take the preview down with it; Retry
+  // re-runs this effect via versionsReload.
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      setVersionsError(null);
+      try {
+        const res = await fetch(`/api/projects/${id}/versions`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Could not load version history (HTTP ${res.status}).`);
+        const data = (await res.json()) as { head_version_id: number | null; versions: VersionMeta[] };
+        if (cancelled) return;
+        setVersions(data.versions);
+        setHeadVersionId(data.head_version_id);
+      } catch (e) {
+        console.error("Version history load failed:", e);
+        if (!cancelled) {
+          setVersions(null);
+          setVersionsError((e as Error).message);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, versionsReload]);
 
   // AC-6 (issue #44): link/unlink the project to a connection.
   async function handleLink() {
@@ -352,6 +396,71 @@ export default function ProjectPreviewPage() {
       {pushResult && (
         <div className="notice" style={{ marginBottom: 12 }}>{pushResult}</div>
       )}
+
+      {/* Phase 0.9: SiteModel version history, newest first. */}
+      <section className="card" style={{ marginBottom: 16, padding: 14 }} aria-labelledby="versions-heading">
+        <h2 id="versions-heading" style={{ marginTop: 0 }}>Versions</h2>
+        {versionsError ? (
+          <div>
+            <div className="error" style={{ marginTop: 0 }}>{versionsError}</div>
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ width: "auto", marginTop: 8 }}
+              onClick={() => setVersionsReload((n) => n + 1)}
+            >
+              Retry
+            </button>
+          </div>
+        ) : versions === null ? (
+          <p className="hint" style={{ margin: 0 }}>Loading version history…</p>
+        ) : versions.length === 0 ? (
+          <p className="hint" style={{ margin: 0 }}>
+            This project predates versioned storage — its content lives in the
+            page snapshot below. The next generation or change that writes a
+            SiteModel version will start the history here.
+          </p>
+        ) : (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {versions.map((v, i) => (
+              <li
+                key={v.id}
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  padding: "8px 0",
+                  borderTop: i === 0 ? "none" : "1px solid var(--app-border)",
+                }}
+              >
+                <strong style={{ fontSize: 14 }}>v{v.version_number}</strong>
+                {v.id === headVersionId && (
+                  <span
+                    style={{
+                      padding: "2px 8px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      borderRadius: 999,
+                      background: "var(--app-success-bg)",
+                      color: "var(--app-success)",
+                    }}
+                  >
+                    current
+                  </span>
+                )}
+                <span style={{ fontSize: 13, color: "var(--app-muted)" }}>{v.source}</span>
+                <time
+                  style={{ marginLeft: "auto", fontSize: 13, color: "var(--app-muted)" }}
+                  dateTime={v.created_at}
+                >
+                  {new Date(v.created_at).toLocaleString()}
+                </time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {/* AC-4 (issue #16): edit form, pre-filled from the saved input. */}
       {editing && editInput && (

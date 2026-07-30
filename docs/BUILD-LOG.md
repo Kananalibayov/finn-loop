@@ -54,3 +54,12 @@ One dated line per merged PR, in plain English a non-programmer can read. Append
 - 2026-07-30 — #227: the roadmap now records the owner's standing decision
   that the builder may also make product-design choices, provided each one is
   written down in the roadmap and decision log for after-the-fact review.
+- 2026-07-30 — #232: the app's database now runs in WAL mode with a busy
+  timeout, so simultaneous reads and writes stop tripping over each other.
+- 2026-07-30 — #236: sites can now have a version history — every saved
+  version of a site is stored immutably and validated, with the project
+  pointing at its current version. Older projects are untouched and keep
+  working exactly as before.
+- 2026-07-30 — the project screen now shows that version history: a Versions
+  card lists each saved version (newest first, the current one marked), and
+  older projects without versions say so honestly instead of pretending.
