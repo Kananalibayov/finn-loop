@@ -13,6 +13,8 @@ import { heroCentered } from "./hero/centered.ts";
 import { heroSplit } from "./hero/split.ts";
 import { servicesGrid } from "./services/grid.ts";
 import { servicesList } from "./services/list.ts";
+import { teamGrid } from "./team/grid.ts";
+import { teamRows } from "./team/rows.ts";
 import { testimonialsCards } from "./testimonials/cards.ts";
 import { testimonialsSingle } from "./testimonials/single.ts";
 import { REGISTRY_VERSION, type SectionRenderer } from "./types.ts";
@@ -50,7 +52,12 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
     cards: testimonialsCards as SectionRenderer<unknown>,
     single: testimonialsSingle as SectionRenderer<unknown>,
   },
+  team: {
+    grid: teamGrid as SectionRenderer<unknown>,
+    rows: teamRows as SectionRenderer<unknown>,
+  },
 };
+
 
 
 
