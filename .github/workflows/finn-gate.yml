@@ -152,7 +152,10 @@ jobs:
           patterns='jwt\.sign|jwtVerify|SignJWT|bcrypt|hashSync|compareSync|process\.env\.[A-Za-z_]*(SECRET|KEY|TOKEN|PASSWORD)|ALTER TABLE|CREATE TABLE|DROP TABLE|child_process|exec\(|eval\(|timingSafeEqual|randomBytes|Math\.random'
           # Added lines only (grep '^\+'), excluding the '+++ b/path' file header so a
           # filename can never trip a content rule.
-          added=$(printf '%s\n' "$diff" | grep -E '^\+' | grep -vE '^\+\+\+ ')
+          # `|| true`: a PR whose filtered diff is empty (docs/markdown-only) makes
+          # grep exit 1; unguarded, `set -euo pipefail` kills the whole gate here and
+          # the check goes red before any verdict is reached (seen on #212).
+          added=$(printf '%s\n' "$diff" | grep -E '^\+' | grep -vE '^\+\+\+ ' || true)
           if printf '%s\n' "$added" | grep -qE "$patterns"; then
             found=$(printf '%s\n' "$added" | grep -oE "$patterns" | sort -u | head -3 | tr '\n' ' ')
             hold "added dangerous content: $found"
