@@ -17,7 +17,19 @@ function tokenAttributes(ctx: RenderContext): string {
 export const faqList: SectionRenderer<FaqContent> = {
   type: "faq",
   variant: "list",
-  css: "",
+  css: `
+.faq-list { container-type: inline-size; }
+.faq-list__items {
+  list-style: none;
+  padding-inline-start: 0;
+  display: grid;
+  gap: var(--space-4) var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+}
+.faq-list__item > * + * { margin-block-start: var(--space-2); }
+.faq-list__item h3 { font-size: var(--step-1); }
+.faq-list__item p { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0

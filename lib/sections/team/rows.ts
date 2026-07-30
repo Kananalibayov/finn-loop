@@ -44,7 +44,31 @@ function renderMember(member: TeamMember): string {
 export const teamRows: SectionRenderer<TeamContent> = {
   type: "team",
   variant: "rows",
-  css: "",
+  css: `
+.team-rows { container-type: inline-size; }
+.team-rows__list {
+  list-style: none;
+  padding-inline-start: 0;
+}
+.team-rows__item { padding-block: var(--space-3); }
+.team-rows__item + .team-rows__item { border-block-start: 1px solid var(--color-border); }
+.team-rows__member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.team-rows__photo {
+  inline-size: calc(var(--space-6) * 2);
+  block-size: calc(var(--space-6) * 2);
+  object-fit: cover;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.team-rows__body > * + * { margin-block-start: var(--space-1); }
+.team-rows__name { font-size: var(--step-1); }
+.team-rows__role { color: var(--color-muted); }
+.team-rows__bio { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading
       ? `<h2 class="team-rows__heading">${escapeHtml(content.heading)}</h2>`

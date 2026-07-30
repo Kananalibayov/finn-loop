@@ -5,8 +5,9 @@ import type { DesignTokens, SectionType, SiteModel } from "../site-model.ts";
 import { validateSite } from "../validate/validate.ts";
 import { getRenderer } from "./registry.ts";
 
-// Issues #216 (batch 1), #219 (batch 2) and #221 (batch 3): the variants styled
-// so far, with the root class each block must stay inside.
+// Issues #216, #219, #221 and #223 (batches 1-4): every variant shipped by the
+// registry, with the root class each block must stay inside. 26/26 — with batch
+// 4 merged, no variant ships an empty stylesheet any more.
 const STYLED: Array<{ type: SectionType; variant: string; root: string }> = [
   { type: "services", variant: "grid", root: ".services-grid" },
   { type: "services", variant: "list", root: ".services-list" },
@@ -26,6 +27,14 @@ const STYLED: Array<{ type: SectionType; variant: string; root: string }> = [
   { type: "stats", variant: "row", root: ".stats-row" },
   { type: "logos", variant: "grid", root: ".logos-grid" },
   { type: "logos", variant: "strip", root: ".logos-strip" },
+  { type: "team", variant: "grid", root: ".team-grid" },
+  { type: "team", variant: "rows", root: ".team-rows" },
+  { type: "faq", variant: "accordion", root: ".faq-accordion" },
+  { type: "faq", variant: "list", root: ".faq-list" },
+  { type: "cta", variant: "banner", root: ".cta-banner" },
+  { type: "cta", variant: "centered", root: ".cta-centered" },
+  { type: "contact", variant: "split", root: ".contact-split" },
+  { type: "contact", variant: "stacked", root: ".contact-stacked" },
 ];
 
 for (const { type, variant, root } of STYLED) {
@@ -62,17 +71,17 @@ const tokens: DesignTokens = {
   typeScale: "1.25", spacingUnit: "8px", radius: "6px", shadow: "0 1px 3px #0002", containerMax: "1100px",
 };
 
-test("a site using all eighteen styled variants renders and passes every quality gate", () => {
+test("a site using all twenty-six styled variants renders and passes every quality gate", () => {
   const model: SiteModel = {
     version: 1,
     brand: { tokens, voice: { tone: "clear" } },
-    meta: { businessName: "Batch Three", contact: {}, hours: [], social: {}, locations: [] },
+    meta: { businessName: "Batch Four", contact: {}, hours: [], social: {}, locations: [] },
     nav: [{ label: "About", href: "/about" }],
     pages: [
       {
         slug: "home",
         title: "Home",
-        seo: { title: "Home — Batch Three", description: "Batch Three home page.", schema: [] },
+        seo: { title: "Home — Batch Four", description: "Batch Four home page.", schema: [] },
         sections: [
           { type: "hero", variant: "split", content: { heading: "Welcome" } },
           {
@@ -166,6 +175,42 @@ test("a site using all eighteen styled variants renders and passes every quality
             },
           },
           {
+            type: "team",
+            variant: "grid",
+            content: {
+              heading: "Team",
+              members: [
+                { name: "Ada Lovelace", role: "Engineer", bio: "Writes the first algorithms.", photo: { kind: "stock", url: "/images/ada.jpg", alt: "Portrait of Ada Lovelace", width: 400, height: 400 } },
+                { name: "Alan Turing", role: "Cryptanalyst", bio: "Breaks the unbreakable." },
+              ],
+            },
+          },
+          {
+            type: "faq",
+            variant: "accordion",
+            content: {
+              heading: "Questions",
+              items: [
+                { question: "Do agents merge?", answer: "Never. GitHub merges, gated on finn-gate." },
+                { question: "What counts as evidence?", answer: "Literal command output with exit codes." },
+              ],
+            },
+          },
+          {
+            type: "cta",
+            variant: "banner",
+            content: { heading: "Ready when you are", subheading: "Gates green before launch.", cta: { label: "Start a project", href: "/about" } },
+          },
+          {
+            type: "contact",
+            variant: "split",
+            content: {
+              heading: "Talk to us",
+              body: ["We reply within one working day.", "Bring the brief, we bring the gates."],
+              showForm: true,
+            },
+          },
+          {
             type: "about",
             variant: "narrative",
             content: {
@@ -179,7 +224,7 @@ test("a site using all eighteen styled variants renders and passes every quality
       {
         slug: "about",
         title: "About",
-        seo: { title: "About — Batch Three", description: "About Batch Three.", schema: [] },
+        seo: { title: "About — Batch Four", description: "About Batch Four.", schema: [] },
         sections: [
           { type: "hero", variant: "centered", content: { heading: "About" } },
           {
@@ -270,6 +315,42 @@ test("a site using all eighteen styled variants renders and passes every quality
             },
           },
           {
+            type: "team",
+            variant: "rows",
+            content: {
+              heading: "People",
+              members: [
+                { name: "Grace Hopper", role: "Admiral", bio: "Finds the first bug.", photo: { kind: "stock", url: "/images/grace.jpg", alt: "Portrait of Grace Hopper", width: 400, height: 400 } },
+                { name: "Margaret Hamilton", role: "Lead", bio: "Lands the guidance software." },
+              ],
+            },
+          },
+          {
+            type: "faq",
+            variant: "list",
+            content: {
+              heading: "More questions",
+              items: [
+                { question: "What is a Build Card?", answer: "The only thing a T1 builder may work from." },
+                { question: "What is finn-gate?", answer: "A required check that decides what GitHub may merge." },
+              ],
+            },
+          },
+          {
+            type: "cta",
+            variant: "centered",
+            content: { heading: "See it for yourself", subheading: "Every claim carries evidence.", cta: { label: "Back home", href: "/" } },
+          },
+          {
+            type: "contact",
+            variant: "stacked",
+            content: {
+              heading: "Write to us",
+              body: ["One inbox, one human, one working day."],
+              showForm: true,
+            },
+          },
+          {
             type: "about",
             variant: "split",
             content: {
@@ -299,6 +380,14 @@ test("a site using all eighteen styled variants renders and passes every quality
   assert.match(rendered.stylesheet, /\.stats-row__items/);
   assert.match(rendered.stylesheet, /\.logos-grid__list/);
   assert.match(rendered.stylesheet, /\.logos-strip__list/);
+  assert.match(rendered.stylesheet, /\.team-grid__list/);
+  assert.match(rendered.stylesheet, /\.team-rows__body/);
+  assert.match(rendered.stylesheet, /\.faq-accordion__question/);
+  assert.match(rendered.stylesheet, /\.faq-list__items/);
+  assert.match(rendered.stylesheet, /\.cta-banner__cta/);
+  assert.match(rendered.stylesheet, /\.cta-centered__content/);
+  assert.match(rendered.stylesheet, /\.contact-split__field/);
+  assert.match(rendered.stylesheet, /\.contact-stacked__form/);
   // And the rendered site passes the deterministic quality gates end to end.
   assert.deepEqual(validateSite(model, rendered), { ok: true, violations: [] });
 });
