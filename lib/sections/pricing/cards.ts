@@ -17,7 +17,51 @@ function tokenAttributes(ctx: RenderContext): string {
 export const pricingCards: SectionRenderer<PricingContent> = {
   type: "pricing",
   variant: "cards",
-  css: "",
+  css: `
+.pricing-cards { container-type: inline-size; }
+.pricing-cards {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+}
+.pricing-cards > * + * { margin-block-start: 0; }
+.pricing-cards > h2 { grid-column: 1 / -1; }
+.pricing-cards__plan {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+}
+.pricing-cards__plan > * + * { margin-block-start: var(--space-2); }
+.pricing-cards__price { font-size: var(--step-2); font-weight: 700; }
+.pricing-cards__period {
+  color: var(--color-muted);
+  font-size: var(--step-0);
+  font-weight: 400;
+  margin-inline-start: var(--space-1);
+}
+.pricing-cards__features {
+  list-style: none;
+  padding-inline-start: 0;
+  flex-grow: 1;
+}
+.pricing-cards__features > * + * { margin-block-start: var(--space-1); }
+.pricing-cards__cta {
+  display: block;
+  text-align: center;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  font-weight: 600;
+}
+.pricing-cards__cta:hover { background: var(--color-primary-hover); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const cards = content.plans.length === 0

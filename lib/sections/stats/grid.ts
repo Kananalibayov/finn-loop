@@ -17,7 +17,29 @@ function tokenAttributes(ctx: RenderContext): string {
 export const statsGrid: SectionRenderer<StatsContent> = {
   type: "stats",
   variant: "grid",
-  css: "",
+  css: `
+.stats-grid { container-type: inline-size; }
+.stats-grid__items {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+}
+.stats-grid__item {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-3);
+  text-align: center;
+}
+.stats-grid__item > * + * { margin-block-start: var(--space-1); }
+.stats-grid__value {
+  font-family: var(--font-heading);
+  font-size: var(--step-3);
+  font-weight: 700;
+  color: var(--color-primary);
+}
+.stats-grid__label { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<dl class="stats-grid__items">${content.items.map((item) => `<div class="stats-grid__item"><dt class="stats-grid__value">${escapeHtml(item.value)}</dt><dd class="stats-grid__label">${escapeHtml(item.label)}</dd></div>`).join("")}</dl>`;

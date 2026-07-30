@@ -37,7 +37,27 @@ function renderLogo(image: LogosContent["images"][number], className: string): s
 export const logosGrid: SectionRenderer<LogosContent> = {
   type: "logos",
   variant: "grid",
-  css: "",
+  css: `
+.logos-grid { container-type: inline-size; }
+.logos-grid__list {
+  list-style: none;
+  padding-inline-start: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+}
+.logos-grid__item {
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+}
+.logos-grid__logo {
+  block-size: var(--space-6);
+  inline-size: auto;
+  max-inline-size: 100%;
+  object-fit: contain;
+}
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const list =
