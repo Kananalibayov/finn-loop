@@ -1,4 +1,6 @@
 import type { SectionType } from "../site-model.ts";
+import { stepsNumbered } from "./steps/numbered.ts";
+import { stepsTimeline } from "./steps/timeline.ts";
 import { servicesGrid } from "./services/grid.ts";
 import { servicesList } from "./services/list.ts";
 import { heroCentered } from "./hero/centered.ts";
@@ -13,6 +15,10 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
   services: {
     grid: servicesGrid as SectionRenderer<unknown>,
     list: servicesList as SectionRenderer<unknown>,
+  },
+  steps: {
+    numbered: stepsNumbered as SectionRenderer<unknown>,
+    timeline: stepsTimeline as SectionRenderer<unknown>,
   },
 };
 
