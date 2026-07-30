@@ -474,15 +474,33 @@ function BrandingSection() {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/branding", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+  // Issue #196: extracted so Retry can re-run it. A failed GET must surface as
+  // a failure branch — never an editable form of empty defaults (Invariant 4).
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/branding", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load (HTTP ${res.status}).`);
+      const d = await res.json();
+      setData(d);
+      setLoadFailed(false);
+    } catch (e) {
+      console.error("Settings section failed to load:", e);
+      setLoadFailed(true);
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   async function handleSave() {
+    // Issue #196: never PUT against unloaded state.
+    if (loading || loadFailed) return;
     setSaving(true);
     setError(null);
     try {
@@ -504,6 +522,22 @@ function BrandingSection() {
   }
 
   if (loading) return null;
+
+  // Issue #196: on a failed GET, render read-only with Retry — no inputs, no
+  // Save button — so empty defaults can never be persisted over real config.
+  if (loadFailed) {
+    return (
+      <section className="card" style={{ marginBottom: 16 }}>
+        <h2>Branding</h2>
+        <div className="error" style={{ marginBottom: 12 }}>
+          Could not load Branding settings: {error}
+        </div>
+        <button type="button" className="btn-secondary" onClick={load}>
+          Retry
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section className="card" style={{ marginBottom: 16 }}>
@@ -548,15 +582,34 @@ function EmailSection() {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/email-settings", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { setCfg(d); setHasPass(d.hasPassword); setLoading(false); })
-      .catch(() => setLoading(false));
+  // Issue #196: extracted so Retry can re-run it. A failed GET must surface as
+  // a failure branch — never an editable form of empty defaults (Invariant 4).
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/email-settings", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load (HTTP ${res.status}).`);
+      const d = await res.json();
+      setCfg(d);
+      setHasPass(d.hasPassword);
+      setLoadFailed(false);
+    } catch (e) {
+      console.error("Settings section failed to load:", e);
+      setLoadFailed(true);
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   async function handleSave() {
+    // Issue #196: never PUT against unloaded state.
+    if (loading || loadFailed) return;
     setSaving(true);
     setError(null);
     try {
@@ -576,6 +629,8 @@ function EmailSection() {
   }
 
   async function handleTest() {
+    // Issue #196: never fire a test against unloaded state.
+    if (loading || loadFailed) return;
     setTesting(true);
     setError(null);
     try {
@@ -596,6 +651,22 @@ function EmailSection() {
   }
 
   if (loading) return null;
+
+  // Issue #196: on a failed GET, render read-only with Retry — no inputs, no
+  // Save/Test buttons — so empty defaults can never be persisted over real config.
+  if (loadFailed) {
+    return (
+      <section className="card" style={{ marginBottom: 16 }}>
+        <h2>Email / SMTP</h2>
+        <div className="error" style={{ marginBottom: 12 }}>
+          Could not load Email settings: {error}
+        </div>
+        <button type="button" className="btn-secondary" onClick={load}>
+          Retry
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section className="card" style={{ marginBottom: 16 }}>
@@ -660,15 +731,34 @@ function PleskSection() {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/plesk/settings", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { setCfg(d); setHasPass(d.hasPassword); setLoading(false); })
-      .catch(() => setLoading(false));
+  // Issue #196: extracted so Retry can re-run it. A failed GET must surface as
+  // a failure branch — never an editable form of empty defaults (Invariant 4).
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/plesk/settings", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load (HTTP ${res.status}).`);
+      const d = await res.json();
+      setCfg(d);
+      setHasPass(d.hasPassword);
+      setLoadFailed(false);
+    } catch (e) {
+      console.error("Settings section failed to load:", e);
+      setLoadFailed(true);
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   async function handleSave() {
+    // Issue #196: never PUT against unloaded state.
+    if (loading || loadFailed) return;
     setSaving(true); setError(null);
     try {
       const res = await fetch("/api/plesk/settings", {
@@ -683,6 +773,8 @@ function PleskSection() {
   }
 
   async function handleTest() {
+    // Issue #196: never fire a test against unloaded state.
+    if (loading || loadFailed) return;
     setTesting(true); setError(null);
     try {
       const res = await fetch("/api/plesk/test", { method: "POST" });
@@ -695,6 +787,22 @@ function PleskSection() {
   }
 
   if (loading) return null;
+
+  // Issue #196: on a failed GET, render read-only with Retry — no inputs, no
+  // Save/Test buttons — so empty defaults can never be persisted over real config.
+  if (loadFailed) {
+    return (
+      <section className="card" style={{ marginBottom: 16 }}>
+        <h2>Plesk Integration</h2>
+        <div className="error" style={{ marginBottom: 12 }}>
+          Could not load Plesk settings: {error}
+        </div>
+        <button type="button" className="btn-secondary" onClick={load}>
+          Retry
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section className="card" style={{ marginBottom: 16 }}>
