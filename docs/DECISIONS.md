@@ -130,3 +130,31 @@ Chosen design, per the issue's delegation of details to the implementing model:
 - **Numbering inside an IMMEDIATE transaction.** `version_number = MAX(existing)+1` computed and written in one better-sqlite3 `.immediate()` transaction, so the read cannot race a concurrent writer under WAL's single-writer rule. `UNIQUE(project_id, version_number)` is the backstop if that reasoning ever breaks. Per-project numbering (not a global sequence) because operators think in "version 3 of this site", and gaps from rolled-back inserts are harmless.
 - **Immutability by omission.** The accessor exposes no update or delete for version rows — supersession, not mutation, so history is the audit trail. Write path validates with `isSiteModel` before persisting; read path re-validates and throws on failure, because a row that fails on read means corrupted or hand-edited storage, and serving it downstream (render, push, diff) would be the fabricated-success pattern Invariant 4 forbids.
 - **Accessor lives in `lib/db.ts`.** The module is past 1,400 lines and a `lib/db/` split by domain is due, but this PR deliberately does not mix a storage feature with a module refactor. Named as future work: split `lib/db.ts` into per-domain modules when the next storage accessor lands.
+
+## 2026-07-30 — Version history wired into the project screen, read-only on purpose
+
+The standing mandate's wire-as-you-go rule applied to #235's storage the same day it
+merged. Chosen shape:
+
+- **`GET /api/projects/[id]/versions` returns metadata plus the head pointer, never
+  models.** Listing is cheap; full models load through `getSiteModelVersion` only when a
+  future diff/revert/preview action asks for one. Empty list + `head_version_id: null`
+  is a 200, not a 404 — a legacy project is a valid state, and the UI must be able to say
+  so plainly. Gated in-handler by `requireRole("editor")` — the route-auth ratchet
+  (`lib/route-auth.test.mts`) caught the first draft within minutes, doing exactly the
+  job it exists for.
+- **A Versions card on the project screen, above the fold of the preview.** Four honest
+  states: loading, error-with-Retry (the fetch is independent of the project fetch so a
+  versions failure cannot take the preview down), the legacy empty state (says where the
+  content actually lives instead of implying "no versions" is an error), and the list
+  with the head version marked `current`.
+- **Read-only, deliberately.** Revert, diff, and per-version preview are the visible
+  features this surface exists to grow — but each is its own roadmap line with its own
+  design (revert writes a NEW version superseding head; it never deletes history). No
+  half-wired buttons shipped.
+- **No route test added.** The three existing route tests fail locally on
+  junctioned-node_modules worktrees (`next/server` resolution) while passing in CI; a
+  fourth would make local evidence permanently red. The route is two accessor calls
+  behind the standard id validation, and both accessors carry their own test file.
+  Verified end-to-end instead: dev server + seeded versions + browser screenshots, in
+  the PR evidence.
