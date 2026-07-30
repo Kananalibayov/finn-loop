@@ -1214,7 +1214,7 @@ export function resolveChangeRequest(
   operatorNotes: string | null,
   fromStatuses: string[],
 ): ChangeRequestRow | null {
-  const allowedStatuses = ["pending", "approved", "rejected", "completed"];
+  const allowedStatuses = ["pending", "approved", "rejected", "completed", "failed"];
   if (!allowedStatuses.includes(status)) {
     throw new Error(`Unknown change-request status: ${status}`);
   }

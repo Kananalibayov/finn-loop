@@ -1,8 +1,14 @@
 import type { SectionType } from "../site-model.ts";
+import { contactSplit } from "./contact/split.ts";
+import { contactStacked } from "./contact/stacked.ts";
 import { ctaBanner } from "./cta/banner.ts";
 import { ctaCentered } from "./cta/centered.ts";
+import { featuresAlternating } from "./features/alternating.ts";
+import { featuresGrid } from "./features/grid.ts";
 import { heroCentered } from "./hero/centered.ts";
 import { heroSplit } from "./hero/split.ts";
+import { servicesGrid } from "./services/grid.ts";
+import { servicesList } from "./services/list.ts";
 import { REGISTRY_VERSION, type SectionRenderer } from "./types.ts";
 
 const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unknown>>>> = {
@@ -10,11 +16,24 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
     split: heroSplit as SectionRenderer<unknown>,
     centered: heroCentered as SectionRenderer<unknown>,
   },
+  services: {
+    grid: servicesGrid as SectionRenderer<unknown>,
+    list: servicesList as SectionRenderer<unknown>,
+  },
+  features: {
+    grid: featuresGrid as SectionRenderer<unknown>,
+    alternating: featuresAlternating as SectionRenderer<unknown>,
+  },
+  contact: {
+    stacked: contactStacked as SectionRenderer<unknown>,
+    split: contactSplit as SectionRenderer<unknown>,
+  },
   cta: {
     banner: ctaBanner as SectionRenderer<unknown>,
     centered: ctaCentered as SectionRenderer<unknown>,
   },
 };
+
 
 export function sectionInstanceId(type: SectionType, variant: string, index: number): string {
   if (index < 0) throw new RangeError("section index must be non-negative");

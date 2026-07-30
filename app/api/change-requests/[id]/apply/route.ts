@@ -74,16 +74,37 @@ export async function POST(
     return NextResponse.json({ error: "Failed to parse project pages." }, { status: 500 });
   }
 
-  // Apply the NL edit to each page (the instruction applies to the whole site).
+  // Apply the NL edit to each page and retain the observed result for accounting.
+  const results: Array<{ key: PageKey; ok: true } | { key: PageKey; ok: false; error: string }> = [];
   const editedPages: GeneratedPage[] = [];
   for (const page of pages) {
     try {
       const modifiedHtml = await applyEdit(page.html, cr.instruction);
+      results.push({ key: page.key, ok: true });
       editedPages.push({ ...page, html: modifiedHtml });
-    } catch {
-      // If a page fails, keep the original (partial success > total failure).
+    } catch (e) {
+      results.push({ key: page.key, ok: false, error: (e as Error).message });
       editedPages.push(page);
     }
+  }
+
+  const edited = results.filter((result) => result.ok);
+  const failed = results.filter((result) => !result.ok) as Array<{
+    key: PageKey;
+    ok: false;
+    error: string;
+  }>;
+  const failureNotes = `Failed pages: ${failed.map((result) => `${result.key}: ${result.error}`).join("; ")}`;
+
+  if (pages.length > 0 && failed.length === pages.length) {
+    const resolved = resolveChangeRequest(num, "failed", failureNotes, ["pending", "approved"]);
+    if (!resolved) {
+      return NextResponse.json(
+        { error: "Request is no longer in a state that allows this transition." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ ok: false, status: "failed", failed }, { status: 502 });
   }
 
   // Save as a new version.
@@ -96,29 +117,10 @@ export async function POST(
     pagesJson: JSON.stringify(editedPages),
   });
 
-  // Mark the request completed.
-  const resolved = resolveChangeRequest(
-    num,
-    "completed",
-    `Applied as project #${newProjectId}`,
-    ["pending", "approved"],
-  );
-  if (!resolved) {
-    return NextResponse.json(
-      { error: "Request is no longer in a state that allows this transition." },
-      { status: 409 },
-    );
-  }
-
-  // Notify client (best-effort).
-  const { getClientById } = await import("@/lib/db");
-  const client = getClientById(cr.client_id);
-  if (client) {
-    notifyClientRequestCompleted(client.email, client.name, cr.instruction).catch(() => {});
-  }
-
   // Optionally push to WP.
   let pushed = 0;
+  let skipped = 0;
+  const pushFailed: Array<{ key: PageKey; error: string }> = [];
   if (body.pushToWp) {
     let creds: { apiUrl: string; username: string; appPassword: string } | null = null;
 
@@ -139,25 +141,77 @@ export async function POST(
         // Read existing WP page IDs from the project.
         let wpPageIds: Record<string, number> = {};
         if (project.wp_page_ids) {
-          try { wpPageIds = JSON.parse(project.wp_page_ids) as Record<string, number>; } catch { /* fresh */ }
-        }
-        for (const page of editedPages) {
-          const wpId = wpPageIds[page.key];
-          if (wpId) {
-            await client.updatePage(wpId, { title: page.title, content: page.html });
+          try {
+            wpPageIds = JSON.parse(project.wp_page_ids) as Record<string, number>;
+          } catch (e) {
+            console.error("[apply] failed to parse WordPress page IDs:", (e as Error).message);
           }
         }
-        pushed = editedPages.length;
-      } catch {
-        // Push failure is non-fatal — the edit is saved; operator can push manually.
+        for (const result of edited) {
+          const page = editedPages.find((candidate) => candidate.key === result.key)!;
+          const wpId = wpPageIds[page.key];
+          if (!wpId) {
+            skipped += 1;
+            continue;
+          }
+          try {
+            await client.updatePage(wpId, { title: page.title, content: page.html });
+            pushed += 1;
+          } catch (e) {
+            const error = (e as Error).message;
+            pushFailed.push({ key: page.key, error });
+            console.error(`[apply] failed to push page ${page.key}:`, error);
+          }
+        }
+      } catch (e) {
+        console.error("[apply] failed to read WordPress page IDs:", (e as Error).message);
       }
     }
   }
 
+  const ok = failed.length === 0 && pushFailed.length === 0;
+  if (!ok) {
+    const notes = failed.length > 0
+      ? failureNotes
+      : `Push failures: ${pushFailed.map((result) => `${result.key}: ${result.error}`).join("; ")}`;
+    const resolved = resolveChangeRequest(num, "failed", notes, ["pending", "approved"]);
+    if (!resolved) {
+      return NextResponse.json(
+        { error: "Request is no longer in a state that allows this transition." },
+        { status: 409 },
+      );
+    }
+  } else {
+    const resolved = resolveChangeRequest(
+      num,
+      "completed",
+      `Applied as project #${newProjectId}`,
+      ["pending", "approved"],
+    );
+    if (!resolved) {
+      return NextResponse.json(
+        { error: "Request is no longer in a state that allows this transition." },
+        { status: 409 },
+      );
+    }
+
+    const { getClientById } = await import("@/lib/db");
+    const client = getClientById(cr.client_id);
+    if (client) {
+      notifyClientRequestCompleted(client.email, client.name, cr.instruction).catch((error) => {
+        console.error("[apply] failed to notify client:", (error as Error).message);
+      });
+    }
+  }
+
   return NextResponse.json({
-    ok: true,
+    ok,
     newProjectId,
-    status: "completed",
+    status: ok ? "completed" : "failed",
+    edited,
+    failed,
     pushed,
+    skipped,
+    pushFailed,
   });
 }
