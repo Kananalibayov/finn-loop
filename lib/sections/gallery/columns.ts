@@ -39,7 +39,22 @@ function imageMarkup(image: GalleryContent["images"][number]): string {
 export const galleryColumns: SectionRenderer<GalleryContent> = {
   type: "gallery",
   variant: "columns",
-  css: "",
+  css: `
+.gallery-columns { container-type: inline-size; }
+.gallery-columns__flow {
+  columns: 16rem;
+  column-gap: var(--space-3);
+}
+.gallery-columns__item {
+  break-inside: avoid;
+  margin-block-end: var(--space-3);
+}
+.gallery-columns__image {
+  inline-size: 100%;
+  block-size: auto;
+  border-radius: var(--radius);
+}
+`.trim(),
   html(content, ctx) {
     const heading = content.heading
       ? `<h2 class="gallery-columns__heading">${escapeHtml(content.heading)}</h2>`

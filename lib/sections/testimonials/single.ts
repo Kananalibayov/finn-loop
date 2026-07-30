@@ -17,7 +17,24 @@ function tokenAttributes(ctx: RenderContext): string {
 export const testimonialsSingle: SectionRenderer<TestimonialsContent> = {
   type: "testimonials",
   variant: "single",
-  css: "",
+  css: `
+.testimonials-single { container-type: inline-size; }
+.testimonials-single__items {
+  display: grid;
+  gap: var(--space-5);
+  justify-items: center;
+  text-align: center;
+  margin-inline: auto;
+  max-inline-size: 60ch;
+}
+.testimonials-single__item > * + * { margin-block-start: var(--space-2); }
+.testimonials-single__item blockquote {
+  font-family: var(--font-heading);
+  font-size: var(--step-2);
+}
+.testimonials-single__item cite { font-style: normal; font-weight: 600; }
+.testimonials-single__item cite + p { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<div class="testimonials-single__items">${content.items.map((item) => `<article class="testimonials-single__item"><blockquote>${escapeHtml(item.quote)}</blockquote><cite>${escapeHtml(item.author)}</cite>${item.role ? `<p>${escapeHtml(item.role)}</p>` : ""}</article>`).join("")}</div>`;

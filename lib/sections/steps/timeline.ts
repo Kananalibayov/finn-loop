@@ -17,7 +17,32 @@ function tokenAttributes(ctx: RenderContext): string {
 export const stepsTimeline: SectionRenderer<StepsContent> = {
   type: "steps",
   variant: "timeline",
-  css: "",
+  css: `
+.steps-timeline { container-type: inline-size; }
+.steps-timeline__track {
+  border-inline-start: 2px solid var(--color-border);
+  padding-inline-start: var(--space-4);
+}
+.steps-timeline__items {
+  list-style: none;
+  padding-inline-start: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+.steps-timeline__node { position: relative; }
+.steps-timeline__node::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(-1 * var(--space-4) - 1px - var(--space-2) / 2);
+  inset-block-start: var(--space-1);
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+.steps-timeline__node > * + * { margin-block-start: var(--space-1); }
+.steps-timeline__node p { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0
