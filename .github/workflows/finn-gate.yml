@@ -1,18 +1,35 @@
 name: finn-gate
 
-# The single mechanical gate between "a reviewer LLM approved this" and "GitHub may
-# auto-merge it". No LLM ever merges; GitHub's native auto-merge does, and it only
-# proceeds when this check passes (make it a required status check on main).
+# The mechanical guard between a change and `main`. Deliberately small.
 #
-# Every condition here is deterministic. Nothing in this workflow asks a model anything.
+# It no longer checks review labels or a "Finn-loop review of <sha>" comment. Those existed to
+# coordinate FOUR models reviewing each other's work. The project now runs ONE model with merge
+# authority, so every label check was ceremony that could stall the loop but could never catch a
+# defect. Removing them was not optional: `gate` is a required status check, so the moment
+# `loop-approved` stopped being applied, the old gate would have gone red on everything and
+# deadlocked the repo.
+#
+# It also no longer polls the `build` check-run. `build` is a required status check on `main`, so
+# GitHub already refuses the merge unless it is green — the poll was belt-and-braces that cost up
+# to ~400s of wall clock on every run.
+#
+# What remains are exactly the checks that do not depend on a second model existing:
+#
+#   1. Tier A paths       -> HOLD. The pipeline's own rulebook and the auth boundary.
+#   2. Dangerous content  -> HOLD. Semantics a path list cannot see.
+#   3. client_id landmine -> HOLD until the tenancy isolation test exists.
+#
+# HOLD keeps the check GREEN and simply does not enable auto-merge, so a human merges
+# deliberately. It must never go red: `gate` is required, so a red hold would make every
+# Tier A change unmergeable by anyone.
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write # only to enable GitHub's native auto-merge; never a direct merge
-  pull-requests: write # to post the dry-run comment / manage the would-auto-merge label
+  pull-requests: write # to comment when a change is held
 
 concurrency:
   group: finn-gate-${{ github.event.pull_request.number }}
@@ -31,113 +48,33 @@ jobs:
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          # Two different outcomes, deliberately distinguished:
-          #
-          #   block <reason>  -> the check goes RED. Something is wrong: no review, or the
-          #                      review is stale. Nothing should merge, by hand or otherwise.
-          #
-          #   hold <reason>   -> the check stays GREEN but auto-merge is NOT enabled. Nothing
-          #                      is wrong; this change just needs a deliberate human. If this
-          #                      went red instead, then once `gate` becomes a required check
-          #                      every protected-path PR would be unmergeable without an admin
-          #                      bypass - a deadlock, since most infrastructure work touches
-          #                      protected paths.
-          block() { echo "BLOCKED: $1"; echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "pass=false" >> "$GITHUB_OUTPUT"; echo "verdict=block" >> "$GITHUB_OUTPUT"; exit 0; }
-          hold()  { echo "HELD FOR HUMAN: $1"; echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "pass=false" >> "$GITHUB_OUTPUT"; echo "verdict=hold" >> "$GITHUB_OUTPUT"; exit 0; }
+          hold() {
+            echo "HELD FOR HUMAN: $1"
+            echo "reason=$1" >> "$GITHUB_OUTPUT"
+            echo "pass=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
 
-          # ---- 1. Labels -------------------------------------------------------
-          labels=$(gh pr view "$PR" --json labels --jq '[.labels[].name] | join(",")')
-          echo "Labels: $labels"
-
-          case ",$labels," in
-            *,needs-human-review,*) hold "needs-human-review is present" ;;
-          esac
-          case ",$labels," in
-            *,loop-approved,*) ;;
-            *) block "loop-approved is absent" ;;
-          esac
-
-          # ---- 2. Reviewed SHA must equal current head -------------------------
-          # finn-t3 posts a comment whose FIRST line is:
-          #   Finn-loop review of <40-char sha>
-          # GitHub does not strip labels when new commits land, so this is the only
-          # thing proving the approved code is the code about to merge.
-          #
-          # An optional leading markdown heading marker is tolerated. Requiring the
-          # line to be byte-exact silently blocked three separate approvals (two of
-          # Kimi's, one of mine) because writing "# " before a heading is what every
-          # model naturally does — and the failure mode is invisible: the gate reports
-          # "no review comment found" while a perfectly good review sits right there.
-          # Tolerating the prefix costs nothing: the SHA capture is still anchored and
-          # still must equal head, which is the property that actually matters.
-          reviewed=$(gh pr view "$PR" --json comments \
-            --jq '[.comments[].body
-                   | split("\n")[0]
-                   | capture("^#{0,6} *Finn-loop review of (?<sha>[0-9a-f]{40})[[:space:]]*$")?
-                   | .sha] | last // ""')
-          # Strip any surrounding quotes and CR, so this works regardless of whether
-          # gh emits raw or JSON-quoted scalars.
-          reviewed=$(printf '%s' "$reviewed" | tr -d '"\r' | tr -d '[:space:]')
-
-          if [ -z "$reviewed" ]; then
-            block "no 'Finn-loop review of <sha>' comment found"
-          fi
-          if [ "$reviewed" != "$HEAD_SHA" ]; then
-            block "review is stale: reviewed $reviewed but head is $HEAD_SHA"
-          fi
-          echo "Reviewed SHA matches head: $HEAD_SHA"
-
-          # ---- 3. Linked issue tier (informational only) -----------------------
-          # tier:t3 no longer forces a hold here — the user has explicitly opted
-          # into full autonomy for GPT-5.6/Kimi-reviewed PRs, tier:t3 included,
-          # until told otherwise. The diff-based checks below (protected paths,
-          # dangerous content, the client_id landmine) remain the real backstop
-          # regardless of tier.
-          body=$(gh pr view "$PR" --json body --jq .body)
-          issue=$(printf '%s' "$body" | grep -oiE 'closes #[0-9]+' | head -1 | grep -oE '[0-9]+' || true)
-          if [ -n "$issue" ]; then
-            itiers=$(gh issue view "$issue" --json labels --jq '[.labels[].name] | join(",")' || echo "")
-            echo "Linked issue #$issue labels: $itiers"
-          else
-            echo "No linked issue found in PR body (not fatal for this gate)"
-          fi
-
-          # ---- 4. Protected paths ---------------------------------------------
           git fetch --quiet origin "$BASE_REF"
           changed=$(git diff --name-only "origin/$BASE_REF...$HEAD_SHA")
           echo "Changed files:"; echo "$changed"
 
-          # Tier A only — always held for a human, deliberately, in two categories:
-          #  - Self-referential governance (.github/workflows, .zcode/skills, CODEOWNERS,
-          #    AGENTS.md, ROADMAP.md, and the *rule* docs): the pipeline's own rulebook.
-          #    Auto-merging changes here would let an agent rewrite its own oversight with
-          #    nobody ever seeing it — e.g. roadmap-approve.yml grants agent-ready to any issue
-          #    that verbatim-cites an unchecked ROADMAP.md line, so an unprotected ROADMAP.md
-          #    would let an agent add a line and self-cite it next pass for unbounded scope.
-          #  - The auth/session security boundary (lib/auth.ts, middleware.ts): a subtly wrong
-          #    change here is a silent live vulnerability, not a visible bug. Kept gated even
-          #    under "full automation" because such work is rare (a handful of roadmap items),
-          #    so it costs almost no human time, and the two-model loop has no strong reviewer
-          #    for it — GLM reviewing Kimi's auth change is weak review of the riskiest code.
+          # ---- 1. Tier A: the pipeline's own rulebook, and the auth boundary -------
+          # Self-referential governance (.github/workflows, .zcode/skills, CODEOWNERS,
+          # AGENTS.md, ROADMAP.md, the rule docs): a model that can merge changes here can
+          # rewrite its own oversight with nobody seeing it. ROADMAP.md matters most now — the
+          # standing product mandate lets the model add roadmap lines, so an unheld ROADMAP.md
+          # would let it grant itself unbounded scope and merge that grant in the same step.
+          # lib/auth.ts and middleware.ts: a subtly wrong session change is a silent live
+          # vulnerability, not a visible bug, and no second model will catch it.
           #
-          # docs/ is NOT blanket-protected any more, and that was a real automation bug:
-          # finn-audit's entire job ends in appending to docs/AUDIT-LOG.md, so a blanket
-          # `docs/.*` hold meant every audit PR required a human merge and the audit loop could
-          # never run unattended. Only the docs that *define correctness or rules* are gated
-          # (a reviewer checks work against NORTH-STAR's invariants, so an agent rewriting it
-          # could redefine "correct"). Generated and append-only records — AUDIT-LOG.md,
-          # BUILT.md, STATE-OF-THE-BUILD.md — auto-merge. Note the list is explicit, so a
-          # newly added rule doc must be added here deliberately.
-          #
-          # Everything else (lib/db.ts, lib/net.ts, lib/plesk.ts, lib/wp.ts, Dockerfile,
-          # docker-compose.yml, package.json, tsconfig.json, next.config.mjs, .nvmrc, all
-          # app/** code) is real but bounded and revertible risk — those auto-merge once
-          # independently reviewed with CI green.
+          # Generated and append-only records are deliberately NOT held — AUDIT-LOG.md,
+          # BUILT.md, DECISIONS.md, BUILD-LOG.md, CONCEPT-AUDIT.md, STATE-OF-THE-BUILD.md — or
+          # the model could not write its own logs while running unattended.
           protected='^(lib/auth\.ts|middleware\.ts|\.github/workflows/.*|\.zcode/skills/.*|\.github/CODEOWNERS|AGENTS\.md|ROADMAP\.md|docs/(NORTH-STAR|AGENT-TIERS|PIPELINE|GAP-LEDGER|PRODUCT-VISION)\.md)$'
           if hit=$(printf '%s\n' "$changed" | grep -E "$protected" | head -3); then
             if [ -n "$hit" ]; then
@@ -145,34 +82,27 @@ jobs:
             fi
           fi
 
-          # ---- 5. Dangerous content ------------------------------------------
-          # Path lists miss semantics: a tier:t2 PR can add lib/sessionHelper.ts, or
-          # inline ALTER TABLE in a route handler, and evade any filename check.
-          diff=$(git diff "origin/$BASE_REF...$HEAD_SHA" -- . ':(exclude)*.test.mts' ':(exclude)docs/**' ':(exclude)*.md')
-          patterns='jwt\.sign|jwtVerify|SignJWT|bcrypt|hashSync|compareSync|process\.env\.[A-Za-z_]*(SECRET|KEY|TOKEN|PASSWORD)|ALTER TABLE|CREATE TABLE|DROP TABLE|child_process|exec\(|eval\(|timingSafeEqual|randomBytes|Math\.random'
-          # Added lines only (grep '^\+'), excluding the '+++ b/path' file header so a
-          # filename can never trip a content rule.
-          # `|| true`: a PR whose filtered diff is empty (docs/markdown-only) makes
-          # grep exit 1; unguarded, `set -euo pipefail` kills the whole gate here and
-          # the check goes red before any verdict is reached (seen on #212).
+          # ---- 2. Dangerous content in ADDED lines only ----------------------------
+          # A path list misses semantics: a PR can add lib/sessionHelper.ts, or inline DDL in a
+          # route handler, and evade any filename check.
+          diff=$(git diff "origin/$BASE_REF...$HEAD_SHA" -- . ':(exclude)*.test.mts' ':(exclude)docs/**' ':(exclude)*.md' || true)
           added=$(printf '%s\n' "$diff" | grep -E '^\+' | grep -vE '^\+\+\+ ' || true)
-          if printf '%s\n' "$added" | grep -qE "$patterns"; then
-            found=$(printf '%s\n' "$added" | grep -oE "$patterns" | sort -u | head -3 | tr '\n' ' ')
-            hold "added dangerous content: $found"
+          if [ -n "$added" ]; then
+            patterns='jwt\.sign|jwtVerify|SignJWT|bcrypt|hashSync|compareSync|process\.env\.[A-Za-z_]*(SECRET|KEY|TOKEN|PASSWORD)|ALTER TABLE|CREATE TABLE|DROP TABLE|child_process|exec\(|eval\(|timingSafeEqual|randomBytes|Math\.random'
+            if printf '%s\n' "$added" | grep -qE "$patterns"; then
+              found=$(printf '%s\n' "$added" | grep -oE "$patterns" | sort -u | head -3 | tr '\n' ' ')
+              hold "added dangerous content: $found"
+            fi
+            if printf '%s\n' "$added" | grep -q 'dangerouslySetInnerHTML'; then
+              hold "adds dangerouslySetInnerHTML — model output must never reach an unsanitised sink"
+            fi
+            if printf '%s\n' "$added" | grep -q 'srcDoc' && ! printf '%s\n' "$added" | grep -q 'sandbox'; then
+              hold "adds a srcDoc iframe with no sandbox attribute (GAP-LEDGER blocker 6)"
+            fi
           fi
 
-          # ---- 5b. Ledger-specific regressions --------------------------------
-          # Each of these is a defect class GAP-LEDGER already documents, expressed as
-          # something the diff can be checked for. CI cannot see any of them.
-          if printf '%s\n' "$added" | grep -q 'dangerouslySetInnerHTML'; then
-            hold "adds dangerouslySetInnerHTML — model output must never reach an unsanitised sink"
-          fi
-          # A new srcDoc iframe without sandbox re-opens the stored-XSS path closed by #94.
-          if printf '%s\n' "$added" | grep -q 'srcDoc' && ! printf '%s\n' "$added" | grep -q 'sandbox'; then
-            hold "adds a srcDoc iframe with no sandbox attribute (see GAP-LEDGER blocker 6)"
-          fi
-          # A new API route with no authorization. lib/route-auth.test.mts is the real gate
-          # for this, but catching it here gives a faster, clearer signal.
+          # A new API route with no in-handler authorization. lib/route-auth.test.mts is the
+          # enforced ratchet; this is the faster, clearer signal.
           newroutes=$(printf '%s\n' "$changed" | grep -E '^app/api/.*/route\.ts$' || true)
           for r in $newroutes; do
             if [ -f "$r" ] && ! grep -qE 'requireRole|requireAdmin|verifySessionRole|verifySession|verifyHealthSecret|consumeLoginToken' "$r"; then
@@ -180,66 +110,18 @@ jobs:
             fi
           done
 
-          # ---- 5c. The client_id landmine -------------------------------------
-          # GAP-LEDGER: wiring sites.client_id before the change-request state machine,
-          # per-page failure accounting and group-head resolution are merged detonates ~35
-          # latent defects at once - "the single most expensive mistake available in this
-          # codebase". Until the Phase 0.75 isolation test exists, this must not auto-merge.
+          # ---- 3. The client_id landmine ------------------------------------------
+          # Wiring tenancy before an isolation test exists detonates ~35 latent defects.
+          # Phase 0.9 replaces the retrofit with a real boundary; until its test lands, hold.
           if [ ! -f "lib/portal-isolation.test.mts" ]; then
-            if printf '%s\n' "$added" | grep -qE 'assignProjectToClient|client_id\s*=|set client_id'; then
-              hold "touches client_id / assignProjectToClient before lib/portal-isolation.test.mts exists (ROADMAP Phase 0.75)"
+            if [ -n "$added" ] && printf '%s\n' "$added" | grep -qE 'assignProjectToClient|client_id\s*=|set client_id'; then
+              hold "touches client_id / assignProjectToClient before lib/portal-isolation.test.mts exists (Phase 0.9)"
             fi
           fi
 
-          # ---- 6. CI must actually be green for THIS commit --------------------
-          # A builder's PR body claiming "EXIT=0" is a string it typed; it proves nothing.
-          # The only trustworthy evidence is the check run itself, and it must belong to the
-          # exact head SHA - a green run against an older commit must not carry a newer one.
-          #
-          # Branch protection also makes `build` required, so GitHub would hold the merge
-          # anyway. Checking here as well means the gate's own verdict is honest rather than
-          # asserting "all green" while knowing nothing about CI.
-          # The gate finishes in seconds; CI takes about a minute. So wait for `build` to
-          # conclude rather than reporting a false block just because it has not started.
-          # Bounded well under this job's timeout-minutes.
-          build_state="pending"
-          for _ in $(seq 1 40); do
-            build_state=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs" \
-              --jq '[.check_runs[] | select(.name=="build")] | last
-                    | if . == null then "missing"
-                      elif .status != "completed" then .status
-                      else (.conclusion // "missing") end' 2>/dev/null || echo "missing")
-            case "$build_state" in
-              queued|in_progress|pending|missing) sleep 10 ;;
-              *) break ;;
-            esac
-          done
-          echo "build check-run for $HEAD_SHA: $build_state"
-
-          case "$build_state" in
-            success)        ;;
-            skipped)        block "CI 'build' was skipped for $HEAD_SHA" ;;
-            missing|queued|in_progress|pending)
-                            block "CI 'build' did not report for $HEAD_SHA within the wait window" ;;
-            *)              block "CI 'build' is '$build_state' for $HEAD_SHA" ;;
-          esac
-
-          echo "All gates green."
+          echo "All gates clear."
           echo "pass=true" >> "$GITHUB_OUTPUT"
-          echo "verdict=merge" >> "$GITHUB_OUTPUT"
-          echo "reason=all gates green" >> "$GITHUB_OUTPUT"
-
-      - name: Dry-run notice
-        if: steps.gate.outputs.pass == 'true' && vars.FINN_AUTOMERGE != 'on'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          gh pr edit "$PR" --add-label "would-auto-merge" || true
-          gh pr comment "$PR" --body \
-            "**finn-gate: would auto-merge.** All gates green for \`${{ github.event.pull_request.head.sha }}\`.
-          \`FINN_AUTOMERGE\` is not \`on\`, so nothing was merged — this is the dry run. Merge manually if you agree with the verdict."
+          echo "reason=all gates clear" >> "$GITHUB_OUTPUT"
 
       - name: Enable GitHub native auto-merge
         if: steps.gate.outputs.pass == 'true' && vars.FINN_AUTOMERGE == 'on'
@@ -248,50 +130,30 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          # This does NOT merge. It asks GitHub to merge once every REQUIRED check passes
-          # and required reviews are satisfied. finn-gate is itself a required check, so if a
-          # later commit lands and this gate goes red, GitHub holds the merge automatically.
+          # Does NOT merge. Asks GitHub to merge once every required check passes. `gate` is
+          # itself required, so a later commit re-runs this and GitHub holds automatically if
+          # the new diff is no longer eligible.
           gh pr merge "$PR" --auto --squash
-          gh pr comment "$PR" --body \
-            "**finn-gate: auto-merge enabled** for \`${{ github.event.pull_request.head.sha }}\`. GitHub will merge once all required checks pass. Push any commit to withdraw it."
 
-      - name: Withdraw auto-merge when not eligible
+      - name: Explain the hold
         if: steps.gate.outputs.pass != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          gh pr edit "$PR" --remove-label "would-auto-merge" || true
-          # Explicitly disabling makes the withdrawal visible in the PR timeline rather
-          # than leaving a stale "auto-merge enabled" badge on a PR that no longer qualifies.
           gh pr merge "$PR" --disable-auto || true
-
-      - name: Explain a hold
-        if: steps.gate.outputs.verdict == 'hold'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
           gh pr comment "$PR" --body \
-            "⏸️ **finn-gate: held for a human.** ${{ steps.gate.outputs.reason }}
+            "⏸️ **Held for a human.** ${{ steps.gate.outputs.reason }}
 
-          Nothing is wrong with this PR — it just is not eligible for auto-merge. Review it and merge it yourself when you are satisfied. The check is green so it does not block you." || true
+          Nothing is wrong with this PR — it is just not eligible to merge itself. Review it and merge by hand when you are satisfied. This check is green, so it does not block you." || true
 
       - name: Report result
         run: |
-          case "${{ steps.gate.outputs.verdict }}" in
-            merge)
-              echo "finn-gate: eligible for auto-merge — ${{ steps.gate.outputs.reason }}"
-              ;;
-            hold)
-              # GREEN on purpose. A hold means "a human should merge this", not "something is
-              # broken". Failing here would make every protected-path PR unmergeable once
-              # `gate` is a required check, which is most infrastructure work.
-              echo "::notice::finn-gate held for a human: ${{ steps.gate.outputs.reason }}"
-              echo "Not eligible for auto-merge, but not blocking. Merge by hand."
-              ;;
-            *)
-              echo "::error::finn-gate blocked: ${{ steps.gate.outputs.reason }}"
-              exit 1
-              ;;
-          esac
+          if [ "${{ steps.gate.outputs.pass }}" = "true" ]; then
+            echo "finn-gate: clear — ${{ steps.gate.outputs.reason }}"
+          else
+            # GREEN on purpose. A hold means "a human should merge this", not "something is
+            # broken". Failing here would make every Tier A change unmergeable by anyone,
+            # since `gate` is a required check.
+            echo "::notice::finn-gate held for a human: ${{ steps.gate.outputs.reason }}"
+          fi

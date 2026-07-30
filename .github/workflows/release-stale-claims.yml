@@ -23,12 +23,17 @@ name: release-stale-claims
 # cannot yank work out from under a running build. Combined with a grace period, a builder that
 # claimed an issue moments ago is also safe.
 
+# DORMANT — manual trigger only. Kept, not deleted, so the git/review process can be switched
+# back on when the project goes live (the human's words). Re-enable by restoring the schedule.
+#
+# Why dormant: an issue "claim" was `--add-assignee @me`, needed so two builder loops would not
+# grab the same issue. With one model and no issue queue there are no claims to go stale. This
+# fixed a real outage (7 of 9 issues were invisible behind abandoned claims) — that class of
+# failure simply cannot occur now.
 on:
-  schedule:
-    # Every 30 minutes. Matches the builder cadence, so at worst one builder pass sees a stale
-    # queue before it is cleaned.
-    - cron: "*/30 * * * *"
-  workflow_dispatch:
+  workflow_dispatch: {}
+  # schedule:
+  #   - cron: "*/30 * * * *"
 
 permissions:
   issues: write

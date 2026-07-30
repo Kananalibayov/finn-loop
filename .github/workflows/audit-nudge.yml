@@ -9,10 +9,18 @@ name: audit-nudge
 # list), not git log, because a squash-merged PR is one commit regardless of how much
 # it changed - the PR list is what tells you actual scope.
 
+# DORMANT — manual trigger only. Kept, not deleted, so the git/review process can be switched
+# back on when the project goes live (the human's words). Re-enable by restoring the schedule.
+#
+# Why dormant: this opened an "Audit due" ISSUE to remind the human to run /finn-audit. The
+# reminder mechanism was the issue queue, which is no longer in use. Note the underlying need is
+# real and does NOT go away: with one model self-merging, a periodic audit is the only thing that
+# reviews accumulated work. That now lives in the model's own standing instructions rather than
+# in a nudge issue.
 on:
-  schedule:
-    - cron: "0 14 * * *" # once a day; cheap, not urgent
-  workflow_dispatch: {} # manual trigger, e.g. right after a big merge
+  workflow_dispatch: {}
+  # schedule:
+  #   - cron: "0 14 * * *"
 
 permissions:
   issues: write

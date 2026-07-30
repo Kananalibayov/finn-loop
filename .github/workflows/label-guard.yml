@@ -18,11 +18,19 @@ name: label-guard
 #  - `github-actions[bot]` is allowed so future bot-driven flows (e.g. roadmap-approved)
 #    work without a human.
 
+# DORMANT — manual trigger only. Kept, not deleted, so the git/review process can be switched
+# back on when the project goes live (the human's words). Re-enable by restoring the
+# `issues`/`pull_request_target` triggers below.
+#
+# Why dormant: this enforces that privileged labels (agent-ready, loop-approved) were applied
+# by the owner or a bot. With one model holding merge authority there are no privileged labels
+# left to forge — the issue/label queue is not in use.
 on:
-  issues:
-    types: [labeled]
-  pull_request_target:
-    types: [labeled]
+  workflow_dispatch: {}
+  # issues:
+  #   types: [labeled]
+  # pull_request_target:
+  #   types: [labeled]
 
 permissions:
   issues: write

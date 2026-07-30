@@ -1,21 +1,48 @@
 # Finn-Loop on ZCode
 
-A 3-skill AI software factory adapted from
+An AI software factory running on **ZCode**, originally adapted from
 [Alex Finn's "Prompting is dead" video](https://youtu.be/FRGLToHAtgc)
-(repo: [finna/Finn-loop](https://github.com/finna/Finn-loop)),
-running on **ZCode** with **GitHub Issues** instead of Linear, and **ZCode cron**
-instead of Claude Code's `/loop`.
+(repo: [finna/Finn-loop](https://github.com/finna/Finn-loop)).
 
-You spend ~15 min in the morning giving ideas. AI builds + reviews all day while
-ZCode is open. You click merge at night.
+## Current mode: one model, minimal process *(2026-07-30)*
 
 ```
-You (idea) → /finn-spec → GitHub Issue → you label it agent-ready
-                                                ↓
-/finn-t1 or /finn-t2 builds it → opens PR → /finn-t3 reviews → verdict
-                                                ↓
-                    loop-approved → finn-gate → GitHub auto-merges
+You (direction, occasionally) → ROADMAP.md
+                                     ↓
+        one model reads it, decides what is next, builds, opens a PR
+                                     ↓
+              CI must be green ──→ it merges its own work
+                                     ↓
+        except Tier A paths ──→ held for you to merge by hand
 ```
+
+**Why this shape.** The project previously ran four models reviewing each other, coordinated
+through GitHub Issues, labels, claims and approval gates. That machinery existed to make *weak*
+models safe and to stop two builders colliding. Running one strong model with merge authority
+made all of it pure overhead — and worse, it was where nearly every stall came from: abandoned
+claims hiding work, issues left open after delivery, tier filters starving the queue, review
+labels blocking their own approvals. Roughly 680 lines of coordination workflow removed the
+failure modes along with the ceremony.
+
+**What is deliberately kept, and why each one is load-bearing:**
+
+| Kept | Why it cannot go |
+|---|---|
+| Git history | The only undo. One model now makes design calls with nobody reviewing; when one is wrong you need to go back. |
+| `ci.yml` (typecheck, tests, lint) | The only remaining check that cannot be talked past. Without it, "reports success while doing nothing" returns — the defect class that cost this project its first generator. |
+| `docker-smoke.yml` | Proves the shipped artifact actually boots and works, not just that the source compiles. |
+| `revert-red-main.yml` | A broken `main` becomes self-limiting instead of a silent outage nobody notices for hours. |
+| `finn-gate.yml` (slimmed) | Holds Tier A paths for a human, so a self-merging model cannot quietly weaken its own gate, CI, or operating rules. |
+| `backup-restore.yml` | Proves the backup is restorable. Nightly, cheap. |
+
+**Dormant, not deleted** — `label-guard`, `roadmap-approve`, `release-stale-claims`,
+`close-delivered-issues`, `audit-nudge`. Each is switched to manual-trigger-only with a comment
+explaining what it did and when to switch it back. **Restore them when the project goes live**
+and more than one model works the repo again; several fixed real outages and would be needed
+again the moment issues and labels return.
+
+The sections below describing the issue → `agent-ready` → tier-claim → review flow are **the
+dormant process**, retained as the record of how to switch back on.
 
 ---
 

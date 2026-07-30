@@ -22,9 +22,19 @@ name: roadmap-approve
 # LLM-assigned and repeatedly wrong, while the diff-based path check is what actually protects
 # anything.
 
+# DORMANT — manual trigger only. Kept, not deleted, so the git/review process can be switched
+# back on when the project goes live (the human's words). Re-enable by restoring the `issues`
+# trigger below.
+#
+# Why dormant: this auto-applied `agent-ready` to an issue that verbatim-cited an unchecked
+# ROADMAP.md line — the safe automation of the human's approval step. The implementing model no
+# longer works from an issue queue (it builds directly from ROADMAP.md and its own reading of
+# the code), so there is nothing to approve. The property this protected still holds by another
+# route: ROADMAP.md is a Tier A path in finn-gate, so a model cannot merge its own scope grant.
 on:
-  issues:
-    types: [opened, edited, labeled]
+  workflow_dispatch: {}
+  # issues:
+  #   types: [opened, edited, labeled]
 
 permissions:
   issues: write
