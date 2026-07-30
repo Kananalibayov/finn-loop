@@ -20,15 +20,23 @@ name: close-delivered-issues
 # This is deliberately a backstop, not a replacement: when GitHub's keyword works, this finds the
 # issue already closed and does nothing.
 
+# DORMANT — manual trigger only. Kept, not deleted, so the git/review process can be switched
+# back on when the project goes live (the human's words). Re-enable by restoring the
+# `pull_request_target` trigger below.
+#
+# Why dormant: this backstopped GitHub's unreliable "Closes #N" keyword, which silently left
+# five delivered issues open and made the queue look full of ghost work. Real bug, real fix —
+# but it only matters if work is tracked as issues, and it no longer is. If issues come back,
+# so must this: GitHub's keyword genuinely cannot be trusted in this repo.
 on:
-  pull_request_target:
-    types: [closed]
   workflow_dispatch:
     inputs:
       pr:
         description: "PR number to reconcile (for backfilling a missed one)"
         required: false
         type: string
+  # pull_request_target:
+  #   types: [closed]
 
 permissions:
   contents: read
