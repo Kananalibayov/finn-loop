@@ -119,3 +119,14 @@ by tests: `pricing/table` overflowed at 480px (fixed with
 `table-layout: fixed`) and a price/period run-together (fixed with a margin).
 Visual review remains part of the definition of done for CSS work — the gates
 prove structure, the screenshots prove appearance.
+
+## 2026-07-30 — Versioned SiteModel storage: immutable rows + a nullable head pointer (#235, Phase 0.9)
+
+Chosen design, per the issue's delegation of details to the implementing model:
+
+- **Table shape.** `site_model_versions(id, project_id REFERENCES sites(id) ON DELETE RESTRICT, version_number, model_json, source, created_at, UNIQUE(project_id, version_number))`. `ON DELETE RESTRICT` so a project cannot be deleted out from under its history; project deletion stays a future, explicit archival decision.
+- **Nullable head pointer on `sites`.** `head_version_id` is NULL for every legacy `pages_json` project; those render exactly as today, no destructive migration, no backfill. A NULL head is the honest state "this project predates versioned storage", and the UI will say exactly that rather than fabricate a version 1.
+- **`PRAGMA foreign_keys = ON` at open.** SQLite parses REFERENCES but never enforces them without this per-connection pragma. Enabling it is provably safe for legacy data: no existing table declares an FK clause, so there is nothing retroactively enforced. Proven by AC-3 (orphan insert throws).
+- **Numbering inside an IMMEDIATE transaction.** `version_number = MAX(existing)+1` computed and written in one better-sqlite3 `.immediate()` transaction, so the read cannot race a concurrent writer under WAL's single-writer rule. `UNIQUE(project_id, version_number)` is the backstop if that reasoning ever breaks. Per-project numbering (not a global sequence) because operators think in "version 3 of this site", and gaps from rolled-back inserts are harmless.
+- **Immutability by omission.** The accessor exposes no update or delete for version rows — supersession, not mutation, so history is the audit trail. Write path validates with `isSiteModel` before persisting; read path re-validates and throws on failure, because a row that fails on read means corrupted or hand-edited storage, and serving it downstream (render, push, diff) would be the fabricated-success pattern Invariant 4 forbids.
+- **Accessor lives in `lib/db.ts`.** The module is past 1,400 lines and a `lib/db/` split by domain is due, but this PR deliberately does not mix a storage feature with a module refactor. Named as future work: split `lib/db.ts` into per-domain modules when the next storage accessor lands.

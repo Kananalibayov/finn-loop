@@ -9,6 +9,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { BUILTIN_TEMPLATES } from "./builtin-templates.ts";
+import { isSiteModel, type SiteModel } from "./site-model.ts";
 
 export interface ProjectRow {
   id: number;
@@ -28,6 +29,9 @@ export interface ProjectRow {
   wp_connection_id: number | null;
   /** AC-2 (issue #68): linked client id (null = unassigned). */
   client_id: number | null;
+  /** Phase 0.9 (#235): pointer to the current site_model_versions row
+   *  (null = legacy pages_json project, no versions yet). */
+  head_version_id: number | null;
 }
 
 /** AC-7: configurable via DATABASE_FILE env, default data/app.db. */
@@ -51,6 +55,10 @@ function db(): Database.Database {
   // must be set on every open — this is the app's only read-write open path.
   conn.pragma("journal_mode = WAL");
   conn.pragma("busy_timeout = 5000");
+  // Phase 0.9 (#235): enforce REFERENCES — without this per-connection pragma
+  // SQLite parses foreign keys but never checks them. Existing tables have no
+  // FK clauses, so enabling this cannot break legacy data.
+  conn.pragma("foreign_keys = ON");
   // AC-2: sites table. IF NOT EXISTS so re-runs are idempotent (NG-4).
   // AC-1 (issue #16): site_group_id groups a site with its regenerated versions.
   conn.exec(`
@@ -84,6 +92,25 @@ function db(): Database.Database {
   // wp_settings). Idempotent — re-runs are no-ops; existing rows stay null.
   if (!cols.some((c) => c.name === "wp_connection_id")) {
     conn.exec(`ALTER TABLE sites ADD COLUMN wp_connection_id INTEGER;`);
+  }
+  // Phase 0.9 (#235): versioned SiteModel storage — one immutable row per
+  // version, project row carries a nullable head pointer. Legacy pages_json
+  // projects have no versions and render exactly as today. FK enforced via
+  // PRAGMA foreign_keys above; UNIQUE(project_id, version_number) is the
+  // backstop for the transaction-numbered insert in insertSiteModelVersion.
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS site_model_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE RESTRICT,
+      version_number INTEGER NOT NULL,
+      model_json TEXT NOT NULL,
+      source TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (project_id, version_number)
+    );
+  `);
+  if (!cols.some((c) => c.name === "head_version_id")) {
+    conn.exec(`ALTER TABLE sites ADD COLUMN head_version_id INTEGER REFERENCES site_model_versions(id);`);
   }
   // AC-1 (issue #24): wp_settings — single-row table for WP connection creds.
   // id is always 1 (enforced by the helpers). Password stored as plaintext
@@ -1384,4 +1411,104 @@ export function getDbPragmas(): { journalMode: string; busyTimeout: number } {
   const journalMode = String(conn.pragma("journal_mode", { simple: true })).toLowerCase();
   const busyTimeout = Number(conn.pragma("busy_timeout", { simple: true }));
   return { journalMode, busyTimeout };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 0.9 (#235): versioned SiteModel storage.
+// A version row is immutable once written — this module deliberately exposes
+// no update or delete for site_model_versions. Supersession, not mutation:
+// history is the audit trail.
+// ---------------------------------------------------------------------------
+
+/** Provenance of a version. Free-text at the DB layer; callers use these. */
+export type SiteModelVersionSource = "generator" | "change-request" | "demo" | "operator";
+
+export interface SiteModelVersionMeta {
+  id: number;
+  project_id: number;
+  version_number: number;
+  source: string;
+  created_at: string;
+}
+
+export type SiteModelVersion = SiteModelVersionMeta & { model: SiteModel };
+
+function parseStoredModel(id: number, modelJson: string): SiteModel {
+  // Defense in depth: the write path validated, but a row that fails on read
+  // means the storage was corrupted or hand-edited. Throw — never serve a
+  // model we cannot trust downstream (render, push, diff).
+  const parsed: unknown = JSON.parse(modelJson);
+  if (!isSiteModel(parsed)) {
+    throw new Error(`site_model_versions row ${id} failed isSiteModel on read — refusing to serve corrupted storage.`);
+  }
+  return parsed;
+}
+
+/** Insert version MAX+1 for the project and move its head pointer, atomically.
+ *  Throws (persisting nothing) when the model fails isSiteModel. */
+export function insertSiteModelVersion(
+  projectId: number,
+  model: SiteModel,
+  source: SiteModelVersionSource,
+): SiteModelVersionMeta {
+  if (!isSiteModel(model)) {
+    throw new Error("insertSiteModelVersion: model failed isSiteModel validation — nothing persisted.");
+  }
+  const conn = db();
+  const insertTx = conn.transaction((): SiteModelVersionMeta => {
+    const prev = conn
+      .prepare(`SELECT MAX(version_number) AS maxv FROM site_model_versions WHERE project_id = ?`)
+      .get(projectId) as { maxv: number | null };
+    const versionNumber = (prev.maxv ?? 0) + 1;
+    const createdAt = new Date().toISOString();
+    const info = conn
+      .prepare(
+        `INSERT INTO site_model_versions (project_id, version_number, model_json, source, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(projectId, versionNumber, JSON.stringify(model), source, createdAt);
+    const id = Number(info.lastInsertRowid);
+    conn.prepare(`UPDATE sites SET head_version_id = ? WHERE id = ?`).run(id, projectId);
+    return { id, project_id: projectId, version_number: versionNumber, source, created_at: createdAt };
+  });
+  // IMMEDIATE so the MAX()+1 read cannot race a concurrent writer (WAL allows
+  // one writer at a time; taking the write lock up front keeps numbering
+  // monotonic per project). UNIQUE(project_id, version_number) is the backstop.
+  return insertTx.immediate();
+}
+
+/** Metadata for every version of a project, newest first. Never includes
+ *  model_json — listing is cheap, full models load only on demand. */
+export function listSiteModelVersions(projectId: number): SiteModelVersionMeta[] {
+  return db()
+    .prepare(
+      `SELECT id, project_id, version_number, source, created_at
+       FROM site_model_versions WHERE project_id = ?
+       ORDER BY version_number DESC`,
+    )
+    .all(projectId) as SiteModelVersionMeta[];
+}
+
+/** One version with its parsed, re-validated model. Null when absent. */
+export function getSiteModelVersion(id: number): SiteModelVersion | null {
+  const row = db()
+    .prepare(`SELECT * FROM site_model_versions WHERE id = ?`)
+    .get(id) as (SiteModelVersionMeta & { model_json: string }) | undefined;
+  if (!row) return null;
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    version_number: row.version_number,
+    source: row.source,
+    created_at: row.created_at,
+    model: parseStoredModel(row.id, row.model_json),
+  };
+}
+
+/** The project's current head version with model, or null when the project
+ *  has no versions (legacy pages_json project) or does not exist. */
+export function getHeadSiteModel(projectId: number): SiteModelVersion | null {
+  const project = getProject(projectId);
+  if (!project || project.head_version_id == null) return null;
+  return getSiteModelVersion(project.head_version_id);
 }
