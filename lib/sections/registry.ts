@@ -5,6 +5,8 @@ import { ctaBanner } from "./cta/banner.ts";
 import { ctaCentered } from "./cta/centered.ts";
 import { featuresAlternating } from "./features/alternating.ts";
 import { featuresGrid } from "./features/grid.ts";
+import { galleryColumns } from "./gallery/columns.ts";
+import { galleryGrid } from "./gallery/grid.ts";
 import { heroCentered } from "./hero/centered.ts";
 import { heroSplit } from "./hero/split.ts";
 import { servicesGrid } from "./services/grid.ts";
@@ -32,7 +34,12 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
     banner: ctaBanner as SectionRenderer<unknown>,
     centered: ctaCentered as SectionRenderer<unknown>,
   },
+  gallery: {
+    grid: galleryGrid as SectionRenderer<unknown>,
+    columns: galleryColumns as SectionRenderer<unknown>,
+  },
 };
+
 
 
 export function sectionInstanceId(type: SectionType, variant: string, index: number): string {
