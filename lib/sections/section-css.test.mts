@@ -5,8 +5,8 @@ import type { DesignTokens, SectionType, SiteModel } from "../site-model.ts";
 import { validateSite } from "../validate/validate.ts";
 import { getRenderer } from "./registry.ts";
 
-// Issue #216: the six variants styled in CSS batch 1, with the root class each
-// block must stay inside.
+// Issues #216 (batch 1) and #219 (batch 2): the twelve variants styled so far,
+// with the root class each block must stay inside.
 const STYLED: Array<{ type: SectionType; variant: string; root: string }> = [
   { type: "services", variant: "grid", root: ".services-grid" },
   { type: "services", variant: "list", root: ".services-list" },
@@ -14,6 +14,12 @@ const STYLED: Array<{ type: SectionType; variant: string; root: string }> = [
   { type: "features", variant: "alternating", root: ".features-alternating" },
   { type: "about", variant: "narrative", root: ".about-narrative" },
   { type: "about", variant: "split", root: ".about-split" },
+  { type: "testimonials", variant: "cards", root: ".testimonials-cards" },
+  { type: "testimonials", variant: "single", root: ".testimonials-single" },
+  { type: "steps", variant: "numbered", root: ".steps-numbered" },
+  { type: "steps", variant: "timeline", root: ".steps-timeline" },
+  { type: "gallery", variant: "grid", root: ".gallery-grid" },
+  { type: "gallery", variant: "columns", root: ".gallery-columns" },
 ];
 
 for (const { type, variant, root } of STYLED) {
@@ -50,17 +56,17 @@ const tokens: DesignTokens = {
   typeScale: "1.25", spacingUnit: "8px", radius: "6px", shadow: "0 1px 3px #0002", containerMax: "1100px",
 };
 
-test("a site using all six styled variants renders and passes every quality gate", () => {
+test("a site using all twelve styled variants renders and passes every quality gate", () => {
   const model: SiteModel = {
     version: 1,
     brand: { tokens, voice: { tone: "clear" } },
-    meta: { businessName: "Batch One", contact: {}, hours: [], social: {}, locations: [] },
+    meta: { businessName: "Batch Two", contact: {}, hours: [], social: {}, locations: [] },
     nav: [{ label: "About", href: "/about" }],
     pages: [
       {
         slug: "home",
         title: "Home",
-        seo: { title: "Home — Batch One", description: "Batch One home page.", schema: [] },
+        seo: { title: "Home — Batch Two", description: "Batch Two home page.", schema: [] },
         sections: [
           { type: "hero", variant: "split", content: { heading: "Welcome" } },
           {
@@ -86,6 +92,40 @@ test("a site using all six styled variants renders and passes every quality gate
             },
           },
           {
+            type: "testimonials",
+            variant: "cards",
+            content: {
+              heading: "Clients",
+              items: [
+                { quote: "The site passes its own gates.", author: "Ada Lovelace", role: "CTO" },
+                { quote: "Evidence in every pull request.", author: "Alan Turing" },
+              ],
+            },
+          },
+          {
+            type: "steps",
+            variant: "numbered",
+            content: {
+              heading: "How it works",
+              items: [
+                { title: "Brief", description: "You answer a short interview." },
+                { title: "Build", description: "The generator assembles the site." },
+                { title: "Launch", description: "Gates green, then publish." },
+              ],
+            },
+          },
+          {
+            type: "gallery",
+            variant: "grid",
+            content: {
+              heading: "Recent work",
+              images: [
+                { kind: "stock", url: "/images/work-one.jpg", alt: "Bakery storefront site", width: 800, height: 600 },
+                { kind: "stock", url: "/images/work-two.jpg", alt: "Plumber landing page", width: 800, height: 600 },
+              ],
+            },
+          },
+          {
             type: "about",
             variant: "narrative",
             content: {
@@ -99,7 +139,7 @@ test("a site using all six styled variants renders and passes every quality gate
       {
         slug: "about",
         title: "About",
-        seo: { title: "About — Batch One", description: "About Batch One.", schema: [] },
+        seo: { title: "About — Batch Two", description: "About Batch Two.", schema: [] },
         sections: [
           { type: "hero", variant: "centered", content: { heading: "About" } },
           {
@@ -122,6 +162,39 @@ test("a site using all six styled variants renders and passes every quality gate
             },
           },
           {
+            type: "testimonials",
+            variant: "single",
+            content: {
+              heading: "Kind words",
+              items: [
+                { quote: "Never report success for work that did not happen.", author: "Grace Hopper", role: "Admiral" },
+              ],
+            },
+          },
+          {
+            type: "steps",
+            variant: "timeline",
+            content: {
+              heading: "Milestones",
+              items: [
+                { title: "Founded", description: "The loop starts." },
+                { title: "Registry", description: "Sections become composable." },
+              ],
+            },
+          },
+          {
+            type: "gallery",
+            variant: "columns",
+            content: {
+              heading: "Gallery",
+              images: [
+                { kind: "stock", url: "/images/gallery-one.jpg", alt: "Cafe homepage hero", width: 800, height: 600 },
+                { kind: "stock", url: "/images/gallery-two.jpg", alt: "Gym pricing page", width: 800, height: 1000 },
+                { kind: "stock", url: "/images/gallery-three.jpg", alt: "Florist about page", width: 800, height: 500 },
+              ],
+            },
+          },
+          {
             type: "about",
             variant: "split",
             content: {
@@ -139,6 +212,12 @@ test("a site using all six styled variants renders and passes every quality gate
   assert.match(rendered.stylesheet, /\.services-grid__items/);
   assert.match(rendered.stylesheet, /\.features-alternating__index/);
   assert.match(rendered.stylesheet, /\.about-split__cta/);
+  assert.match(rendered.stylesheet, /\.testimonials-cards__items/);
+  assert.match(rendered.stylesheet, /\.testimonials-single__items/);
+  assert.match(rendered.stylesheet, /\.steps-numbered__items/);
+  assert.match(rendered.stylesheet, /\.steps-timeline__track/);
+  assert.match(rendered.stylesheet, /\.gallery-grid__list/);
+  assert.match(rendered.stylesheet, /\.gallery-columns__flow/);
   // And the rendered site passes the deterministic quality gates end to end.
   assert.deepEqual(validateSite(model, rendered), { ok: true, violations: [] });
 });

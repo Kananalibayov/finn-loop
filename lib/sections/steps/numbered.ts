@@ -17,7 +17,32 @@ function tokenAttributes(ctx: RenderContext): string {
 export const stepsNumbered: SectionRenderer<StepsContent> = {
   type: "steps",
   variant: "numbered",
-  css: "",
+  css: `
+.steps-numbered { container-type: inline-size; }
+.steps-numbered__items {
+  list-style: none;
+  padding-inline-start: 0;
+  counter-reset: step;
+  display: grid;
+  gap: var(--space-4) var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+}
+.steps-numbered__item { counter-increment: step; }
+.steps-numbered__item::before {
+  content: counter(step);
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  margin-block-end: var(--space-2);
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  font-weight: 700;
+}
+.steps-numbered__item > * + * { margin-block-start: var(--space-2); }
+.steps-numbered__item p { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0

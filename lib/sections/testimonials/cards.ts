@@ -17,7 +17,29 @@ function tokenAttributes(ctx: RenderContext): string {
 export const testimonialsCards: SectionRenderer<TestimonialsContent> = {
   type: "testimonials",
   variant: "cards",
-  css: "",
+  css: `
+.testimonials-cards { container-type: inline-size; }
+.testimonials-cards__items {
+  list-style: none;
+  padding-inline-start: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+}
+.testimonials-cards__item {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-3);
+}
+.testimonials-cards__item > * + * { margin-block-start: var(--space-2); }
+.testimonials-cards__item blockquote {
+  padding-inline-start: var(--space-2);
+  border-inline-start: 2px solid var(--color-primary);
+}
+.testimonials-cards__item cite { font-style: normal; font-weight: 600; }
+.testimonials-cards__item cite + p { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<ul class="testimonials-cards__items">${content.items.map((item) => `<li class="testimonials-cards__item"><blockquote>${escapeHtml(item.quote)}</blockquote><cite>${escapeHtml(item.author)}</cite>${item.role ? `<p>${escapeHtml(item.role)}</p>` : ""}</li>`).join("")}</ul>`;

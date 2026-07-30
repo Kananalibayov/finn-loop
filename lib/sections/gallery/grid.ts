@@ -38,7 +38,23 @@ function imageMarkup(image: GalleryContent["images"][number]): string {
 export const galleryGrid: SectionRenderer<GalleryContent> = {
   type: "gallery",
   variant: "grid",
-  css: "",
+  css: `
+.gallery-grid { container-type: inline-size; }
+.gallery-grid__list {
+  list-style: none;
+  padding-inline-start: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+}
+.gallery-grid__image {
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius);
+}
+`.trim(),
   html(content, ctx) {
     const heading = content.heading
       ? `<h2 class="gallery-grid__heading">${escapeHtml(content.heading)}</h2>`
