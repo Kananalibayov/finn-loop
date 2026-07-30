@@ -37,9 +37,20 @@ test("plan accepts a valid mocked site plan", async () => {
   await withMock(validPlan, async () => assert.deepEqual(await plan(input), validPlan));
 });
 
+// The negative fixture must be a variant name that can never become real. This test
+// originally used `services/grid`, which was genuinely unregistered when #171 was written —
+// then #177 registered it, `plan()` correctly began accepting it, and this assertion started
+// failing on main. Every section-registry PR would have re-broken it in turn. A sentinel name
+// no variant will ever claim keeps the test asserting what it means: unrenderable is rejected.
+const UNREGISTERED_VARIANT = "__never-registered__";
+
 test("plan rejects an unregistered section variant", async () => {
   const { plan } = await import("./plan.ts");
-  await withMock({ ...validPlan, pages: [{ ...validPlan.pages[0], sections: [{ type: "services", variant: "grid" }] }] },
+  const { getRenderer } = await import("./sections/registry.ts");
+  // Guard the fixture itself, so this can never silently rot the way it just did.
+  assert.equal(getRenderer("services", UNREGISTERED_VARIANT), null,
+    "fixture is no longer unregistered — pick a different sentinel");
+  await withMock({ ...validPlan, pages: [{ ...validPlan.pages[0], sections: [{ type: "services", variant: UNREGISTERED_VARIANT }] }] },
     async () => await assert.rejects(() => plan(input), /invalid|unrenderable/i));
 });
 
