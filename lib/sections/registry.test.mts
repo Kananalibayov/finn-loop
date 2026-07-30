@@ -22,5 +22,7 @@ test("section instance ids are versioned and indexed", () => {
 
 test("listVariants exposes only registered variants", () => {
   assert.deepEqual([...listVariants("hero")].sort(), ["centered", "split"]);
-  assert.deepEqual(listVariants("faq"), []);
+  // faq was this test's unregistered-type example until #176 registered it;
+  // the assertion now pins its registered variants instead.
+  assert.deepEqual([...listVariants("faq")].sort(), ["accordion", "list"]);
 });
