@@ -28,7 +28,34 @@ function tokenAttributes(ctx: RenderContext): string {
 export const ctaCentered: SectionRenderer<CtaContent> = {
   type: "cta",
   variant: "centered",
-  css: "",
+  css: `
+.cta-centered { container-type: inline-size; }
+.cta-centered__content {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+  text-align: center;
+  margin-inline: auto;
+  max-inline-size: 60ch;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-5) var(--space-3);
+}
+.cta-centered__subheading { color: var(--color-muted); }
+.cta-centered__cta {
+  display: inline-block;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  font-weight: 600;
+}
+.cta-centered__cta:hover { background: var(--color-primary-hover); }
+`.trim(),
   html(content, ctx) {
     const subheading = content.subheading
       ? `<p class="cta-centered__subheading">${escapeHtml(content.subheading)}</p>`

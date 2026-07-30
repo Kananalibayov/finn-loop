@@ -17,7 +17,20 @@ function tokenAttributes(ctx: RenderContext): string {
 export const faqAccordion: SectionRenderer<FaqContent> = {
   type: "faq",
   variant: "accordion",
-  css: "",
+  css: `
+.faq-accordion { container-type: inline-size; }
+.faq-accordion__item {
+  border-block-end: 1px solid var(--color-border);
+  padding-block: var(--space-2);
+}
+.faq-accordion__item + .faq-accordion__item { margin-block-start: 0; }
+.faq-accordion__question { font-weight: 600; cursor: pointer; }
+.faq-accordion__question::marker { color: var(--color-primary); }
+.faq-accordion__answer {
+  padding-block-start: var(--space-2);
+  color: var(--color-muted);
+}
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0

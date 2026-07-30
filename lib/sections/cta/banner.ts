@@ -28,7 +28,34 @@ function tokenAttributes(ctx: RenderContext): string {
 export const ctaBanner: SectionRenderer<CtaContent> = {
   type: "cta",
   variant: "banner",
-  css: "",
+  css: `
+.cta-banner { container-type: inline-size; }
+.cta-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--color-surface);
+  padding-inline: max(var(--space-3), calc((100% - var(--container-max)) / 2));
+}
+.cta-banner > * { max-inline-size: none; margin-inline: 0; }
+.cta-banner__text > * + * { margin-block-start: var(--space-1); }
+.cta-banner__subheading { color: var(--color-muted); }
+.cta-banner__cta {
+  flex-shrink: 0;
+  display: inline-block;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  font-weight: 600;
+}
+.cta-banner__cta:hover { background: var(--color-primary-hover); }
+`.trim(),
   html(content, ctx) {
     const subheading = content.subheading
       ? `<p class="cta-banner__subheading">${escapeHtml(content.subheading)}</p>`

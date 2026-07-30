@@ -53,7 +53,43 @@ function formColumn(content: ContactContent, ctx: RenderContext): string {
 export const contactSplit: SectionRenderer<ContactContent> = {
   type: "contact",
   variant: "split",
-  css: "",
+  css: `
+.contact-split { container-type: inline-size; }
+.contact-split__content { display: grid; gap: var(--space-4); }
+@container (min-width: 40rem) {
+  .contact-split__content { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: start; }
+}
+.contact-split__text > * + * { margin-block-start: var(--space-2); }
+.contact-split__body { list-style: none; padding-inline-start: 0; }
+.contact-split__body > * + * { margin-block-start: var(--space-1); }
+.contact-split__form { display: grid; gap: var(--space-3); }
+.contact-split__field { display: grid; gap: var(--space-1); }
+.contact-split__field label { font-weight: 600; }
+.contact-split__field input,
+.contact-split__field textarea {
+  inline-size: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+.contact-split__field textarea { min-block-size: calc(var(--space-6) * 2); }
+.contact-split__form button {
+  justify-self: start;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+  cursor: pointer;
+}
+.contact-split__form button:hover { background: var(--color-primary-hover); }
+`.trim(),
   html(content, ctx) {
     const text = textColumn(content);
     const form = formColumn(content, ctx);

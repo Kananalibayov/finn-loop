@@ -41,7 +41,28 @@ function renderMember(member: TeamMember): string {
 export const teamGrid: SectionRenderer<TeamContent> = {
   type: "team",
   variant: "grid",
-  css: "",
+  css: `
+.team-grid { container-type: inline-size; }
+.team-grid__list {
+  list-style: none;
+  padding-inline-start: 0;
+  display: grid;
+  gap: var(--space-4) var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+}
+.team-grid__member { text-align: center; }
+.team-grid__member > * + * { margin-block-start: var(--space-2); }
+.team-grid__photo {
+  inline-size: calc(var(--space-6) * 2);
+  block-size: calc(var(--space-6) * 2);
+  object-fit: cover;
+  border-radius: 50%;
+  margin-inline: auto;
+}
+.team-grid__name { font-size: var(--step-1); }
+.team-grid__role { color: var(--color-muted); }
+.team-grid__bio { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading
       ? `<h2 class="team-grid__heading">${escapeHtml(content.heading)}</h2>`
