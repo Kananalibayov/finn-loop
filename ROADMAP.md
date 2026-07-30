@@ -130,6 +130,9 @@ merely absent, and it is the destination for the entire HTML-validation debt.
       `gallery`, `faq`, `cta`, `contact` — 2 variants each, responsive and WCAG 2.2 AA by
       construction (24px targets, no drag-only interactions, focus never obscured,
       consistent help affordance — all enforced at token level)
+- [ ] Registry completion: `team`, `pricing`, `stats`, `logos`, `steps` — the remaining five
+      `SECTION_TYPES` already shaped in `lib/site-model.ts` (#144), same bar as the line
+      above: 2 variants each, token-driven, WCAG 2.2 AA by construction
 - [ ] Stable `(section_id, variant, registry_version)` instance ids emitted into rendered
       output — **required now**, because capability 3 cannot be retrofitted
 - [ ] `renderHtml(model)` → generated `theme.json` + one real stylesheet, not inline
