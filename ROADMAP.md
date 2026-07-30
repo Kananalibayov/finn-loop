@@ -101,8 +101,8 @@ step and watching the pipeline go red.
 - [x] `sandbox=""` on the four `srcDoc` iframes — done in #94/#105
 - [ ] `assertPublicHttpTarget()` before every server-side fetch (three SSRF paths, one on an
       unauthenticated endpoint) + request body size limits + rate limiting on login
-- [ ] Settings sub-sections: render read-only with Retry on load failure, so a failed GET can
-      no longer persist empty defaults over real branding / SMTP / Plesk config
+- [x] Settings sub-sections: render read-only with Retry on load failure, so a failed GET can
+      no longer persist empty defaults over real branding / SMTP / Plesk config — **#196 (#215)**
 - [ ] Stop transmitting `openaiApiKey: ""` on every Application-settings save
 - [ ] `confirm()` on every destructive action (currently zero in the codebase)
 - [ ] Plesk WP install throws instead of faking success; `provisioned_hosts` row written
@@ -190,21 +190,25 @@ a token document — **never markup**. That is what makes a sanitizer unnecessar
 merely absent, and it is the destination for the entire HTML-validation debt.
 
 - [x] `SiteModel`, `Brand`, `DesignTokens`, `Page`, `Section`, `MediaRef` types — **#139 (#144)**
-- [ ] Section registry, versioned: `hero`, `services`, `about`, `features`, `testimonials`,
+- [x] Section registry, versioned: `hero`, `services`, `about`, `features`, `testimonials`,
       `gallery`, `faq`, `cta`, `contact` — 2 variants each, responsive and WCAG 2.2 AA by
       construction (24px targets, no drag-only interactions, focus never obscured,
-      consistent help affordance — all enforced at token level)
-- [ ] Registry completion: `team`, `pricing`, `stats`, `logos`, `steps` — the remaining five
+      consistent help affordance — all enforced at token level) — **registry #206–#208;
+      styled #216–#223 (#218/#220/#222/#226)**
+- [x] Registry completion: `team`, `pricing`, `stats`, `logos`, `steps` — the remaining five
       `SECTION_TYPES` already shaped in `lib/site-model.ts` (#144), same bar as the line
-      above: 2 variants each, token-driven, WCAG 2.2 AA by construction
-- [ ] Stable `(section_id, variant, registry_version)` instance ids emitted into rendered
-      output — **required now**, because capability 3 cannot be retrofitted
-- [ ] `renderHtml(model)` → generated `theme.json` + one real stylesheet, not inline
-      `<style>` per page
+      above: 2 variants each, token-driven, WCAG 2.2 AA by construction — **registry #207;
+      styled #218/#220/#222/#226**
+- [x] Stable `(section_id, variant, registry_version)` instance ids emitted into rendered
+      output — **required now**, because capability 3 cannot be retrofitted — done in the
+      registry: `data-section-instance="<type>-<variant>-v{REGISTRY_VERSION}-<index>"`
+- [x] `renderHtml(model)` → generated `theme.json` + one real stylesheet, not inline
+      `<style>` per page — **theme-json.ts + shared `/style.css`; inline styles are a
+      blocking validateSite gate (#211)**
 - [ ] `plan(brief)` → `SitePlan` via one JSON-schema LLM call
 - [ ] `write(plan, brief)` → slot values via small parallel JSON-schema calls, shape-asserted
       before persist (`finish_reason === 'stop'`, no refusal, non-empty)
-- [ ] `validate(model)` → the [§4 quality gates](./docs/NORTH-STAR.md), blocking
+- [x] `validate(model)` → the [§4 quality gates](./docs/NORTH-STAR.md), blocking — **#211**
 - [ ] Real imagery: client uploads + licensed stock. Retire `picsum.photos`
 - [ ] Migrate the existing generator; keep old projects readable
 

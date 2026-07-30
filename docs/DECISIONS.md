@@ -82,3 +82,40 @@ name; report a count mismatch only when all expected ids are present but the
 total differs (the duplication/extra-markup case). A dropped section yields
 exactly one violation naming its id; a duplicated section yields exactly one
 violation giving found-vs-expected counts.
+
+## 2026-07-30 — finn-gate: guard the empty-diff scan so docs-only PRs cannot crash the gate (#213)
+
+A docs-only diff makes the gate's protected-path grep match nothing; an
+unguarded empty scan exited non-zero and the workflow read it as a failure,
+wrongly blocking documentation PRs. Chosen: an empty scan is clean; protected
+paths still HOLD green and merge by hand under the mission rules. The property
+that matters is unchanged — the gate decides on observable diff content, not on
+the PR's self-description.
+
+## 2026-07-30 — Failed settings loads render read-only with Retry, never empty defaults (#215, Phase 0.5 line)
+
+Branding/Email/Plesk settings used to render editable empty forms when their
+GET failed; a save then persisted empty defaults over real configuration —
+silent data destruction dressed as a successful save. Chosen: on load failure
+the sub-section renders read-only with a Retry control and the save path is not
+mounted. A read-only failure is the honest state; a retry is cheap; persisting
+empties over real config is the exact fabricated-success pattern Invariant 4
+exists to forbid.
+
+## 2026-07-30 — Section-variant CSS conventions (batches #218/#220/#222/#226, closing the #206 stubs)
+
+The conventions every variant block now follows, machine-enforced in
+`lib/sections/section-css.test.mts` for all 26 entries: the variant root
+carries `container-type: inline-size`; responsive shifts use `@container` only
+(never viewport `@media`); colours and metrics come from token vars only (no
+hex literals; `rem` confined to breakpoints/minmax minimums; `1px`/`2px`
+token-coloured borders allowed; `50%` and `aspect-ratio` count as shape values,
+not metrics); every selector starts with the variant's own root class so no
+block can leak into another section or the page shell. Variants whose markup
+has no inner wrapper (pricing cards, cta banner, faq accordion) neutralise the
+base `.section > *` margins inside their own namespace instead of touching the
+base layer. Two real defects were caught by the mandatory screenshot step, not
+by tests: `pricing/table` overflowed at 480px (fixed with
+`table-layout: fixed`) and a price/period run-together (fixed with a margin).
+Visual review remains part of the definition of done for CSS work — the gates
+prove structure, the screenshots prove appearance.
