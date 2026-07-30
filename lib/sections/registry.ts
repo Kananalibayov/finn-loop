@@ -11,8 +11,16 @@ import { galleryColumns } from "./gallery/columns.ts";
 import { galleryGrid } from "./gallery/grid.ts";
 import { heroCentered } from "./hero/centered.ts";
 import { heroSplit } from "./hero/split.ts";
+import { logosGrid } from "./logos/grid.ts";
+import { logosStrip } from "./logos/strip.ts";
+import { pricingCards } from "./pricing/cards.ts";
+import { pricingTable } from "./pricing/table.ts";
 import { servicesGrid } from "./services/grid.ts";
 import { servicesList } from "./services/list.ts";
+import { statsGrid } from "./stats/grid.ts";
+import { statsRow } from "./stats/row.ts";
+import { stepsNumbered } from "./steps/numbered.ts";
+import { stepsTimeline } from "./steps/timeline.ts";
 import { teamGrid } from "./team/grid.ts";
 import { teamRows } from "./team/rows.ts";
 import { testimonialsCards } from "./testimonials/cards.ts";
@@ -56,12 +64,23 @@ const REGISTRY: Partial<Record<SectionType, Record<string, SectionRenderer<unkno
     grid: teamGrid as SectionRenderer<unknown>,
     rows: teamRows as SectionRenderer<unknown>,
   },
+  logos: {
+    strip: logosStrip as SectionRenderer<unknown>,
+    grid: logosGrid as SectionRenderer<unknown>,
+  },
+  pricing: {
+    cards: pricingCards as SectionRenderer<unknown>,
+    table: pricingTable as SectionRenderer<unknown>,
+  },
+  stats: {
+    row: statsRow as SectionRenderer<unknown>,
+    grid: statsGrid as SectionRenderer<unknown>,
+  },
+  steps: {
+    numbered: stepsNumbered as SectionRenderer<unknown>,
+    timeline: stepsTimeline as SectionRenderer<unknown>,
+  },
 };
-
-
-
-
-
 
 export function sectionInstanceId(type: SectionType, variant: string, index: number): string {
   if (index < 0) throw new RangeError("section index must be non-negative");
