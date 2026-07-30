@@ -38,6 +38,24 @@ Within these boundaries, "not on the roadmap yet" is NOT a reason to skip someth
 - **Operator UI carries the same bar as generated sites:** WCAG 2.2 AA, keyboard reachable,
   visible focus, honest empty/error states, no fabricated success indicators. The dashboard
   is the product the operator buys; it is not exempt from NORTH-STAR §4.
+- **Prefer work the human can SEE in the running app.** When two units of work are close in
+  value, build the one that is visible at `localhost:3000` first. Specifically: **wire new
+  capability into a real screen or route as you go — do not leave it as library code with
+  tests and defer all the wiring to a migration at the end.**
+
+  Why this is a rule and not a preference: on 2026-07-30 the entire Phase 1 pipeline — 14
+  section types, 28 styled variants, the renderer, and eight quality gates — was merged, green
+  and genuinely working, while **no app route called any of it.** The human asked "where are
+  the new features?" repeatedly and the honest answer each time was "built, not wired." That is
+  not wasted work, but it is *unreviewable* work: a human who cannot see output cannot catch a
+  wrong direction, so a bad call compounds for days instead of being corrected in an hour.
+  Visibility is not a nicety — it is the human's only feedback channel while you run
+  unattended.
+
+  Practically: a thin, honest surface early beats a perfect one late. A preview route, a
+  feature-flagged screen, or a route that uses the new path for new work while old projects
+  keep the old path — all fine. What is not fine is a two-day stretch where nothing the human
+  can click has changed.
 
 > Supersedes the previous roadmap, whose issue numbering had diverged from reality
 > (it listed #15–#17 as health/Elementor/Beaver; actual work ran to #93).
