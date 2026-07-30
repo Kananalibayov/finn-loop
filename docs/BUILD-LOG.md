@@ -16,3 +16,10 @@ One dated line per merged PR, in plain English a non-programmer can read. Append
   a modern base layer (fluid type, proper focus rings, reduced-motion support,
   tap targets big enough for thumbs) plus the hero section's own styles.
   Verified with real browser screenshots at desktop and phone widths.
+- 2026-07-30 — #211: generated sites now pass through eight automatic quality
+  gates before anything can be called deliverable: one headline per page,
+  proper page landmarks, unique titles and descriptions, working internal
+  links, no leftover placeholder text, alt text on every image, no smuggled
+  inline styling, and proof that no section was silently dropped or duplicated
+  in rendering. A failure lists every problem at once, in plain language
+  naming the page, so it can be fixed in one pass instead of trial and error.
