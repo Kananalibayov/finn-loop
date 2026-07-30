@@ -103,3 +103,22 @@ export function getRenderer(
 export function listVariants(type: SectionType): string[] {
   return Object.keys(REGISTRY[type] ?? {});
 }
+
+/**
+ * Concatenate the `css` blocks of the variants in `used`, deduplicated by
+ * type/variant and emitted in REGISTRY order (insertion order), so the output
+ * is deterministic and independent of usage order. Unknown pairs are skipped;
+ * variants with an empty `css` contribute nothing.
+ */
+export function collectCss(used: Array<{ type: SectionType; variant: string }>): string {
+  const wanted = new Set(used.map((entry) => `${entry.type}/${entry.variant}`));
+  const blocks: string[] = [];
+  for (const [type, variants] of Object.entries(REGISTRY)) {
+    for (const [variant, renderer] of Object.entries(variants ?? {})) {
+      if (renderer.css && wanted.has(`${type}/${variant}`)) {
+        blocks.push(renderer.css);
+      }
+    }
+  }
+  return blocks.join("\n");
+}

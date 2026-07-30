@@ -24,6 +24,34 @@ function tokenAttributes(ctx: RenderContext): string {
 export const heroCentered: SectionRenderer<HeroContent> = {
   type: "hero",
   variant: "centered",
+  css: `
+.hero-centered { container-type: inline-size; }
+.hero-centered__content {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+  text-align: center;
+  margin-inline: auto;
+  max-inline-size: 60ch;
+}
+.hero-centered__subheading { color: var(--color-muted); font-size: var(--step-1); }
+@container (max-width: 30rem) {
+  .hero-centered__content { max-inline-size: 100%; }
+  .hero-centered__cta { justify-self: stretch; }
+}
+.hero-centered__cta {
+  display: inline-block;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  font-weight: 600;
+}
+.hero-centered__cta:hover { background: var(--color-primary-hover); }
+`.trim(),
   html(content, ctx) {
     const subheading = content.subheading
       ? `<p class="hero-centered__subheading">${escapeHtml(content.subheading)}</p>`

@@ -10,6 +10,13 @@ export interface RenderContext {
 export interface SectionRenderer<C> {
   readonly type: SectionType;
   readonly variant: string;
+  /**
+   * Static rule block scoped to this variant's own classes. Identical for every
+   * instance of the section, so it is emitted once per site no matter how many
+   * times the section appears. Reads tokens via `var(--…)` — never literal values.
+   * An empty string means "not styled yet" (per-section CSS is a follow-up).
+   */
+  readonly css: string;
   html(content: C, ctx: RenderContext): string;
 }
 

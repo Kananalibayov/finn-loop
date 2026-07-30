@@ -53,6 +53,7 @@ function formColumn(content: ContactContent, ctx: RenderContext): string {
 export const contactSplit: SectionRenderer<ContactContent> = {
   type: "contact",
   variant: "split",
+  css: "",
   html(content, ctx) {
     const text = textColumn(content);
     const form = formColumn(content, ctx);

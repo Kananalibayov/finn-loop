@@ -38,6 +38,7 @@ function imageMarkup(image: GalleryContent["images"][number]): string {
 export const galleryGrid: SectionRenderer<GalleryContent> = {
   type: "gallery",
   variant: "grid",
+  css: "",
   html(content, ctx) {
     const heading = content.heading
       ? `<h2 class="gallery-grid__heading">${escapeHtml(content.heading)}</h2>`

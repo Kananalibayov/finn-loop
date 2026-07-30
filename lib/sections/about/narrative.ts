@@ -24,6 +24,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const aboutNarrative: SectionRenderer<AboutContent> = {
   type: "about",
   variant: "narrative",
+  css: "",
   html(content, ctx) {
     const body = content.body
       .map((paragraph) => `<p class="about-narrative__body">${escapeHtml(paragraph)}</p>`)

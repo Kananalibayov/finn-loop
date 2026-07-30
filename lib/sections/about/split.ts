@@ -24,6 +24,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const aboutSplit: SectionRenderer<AboutContent> = {
   type: "about",
   variant: "split",
+  css: "",
   html(content, ctx) {
     const body = content.body
       .map((paragraph) => `<p class="about-split__body">${escapeHtml(paragraph)}</p>`)

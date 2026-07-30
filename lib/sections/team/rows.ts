@@ -44,6 +44,7 @@ function renderMember(member: TeamMember): string {
 export const teamRows: SectionRenderer<TeamContent> = {
   type: "team",
   variant: "rows",
+  css: "",
   html(content, ctx) {
     const heading = content.heading
       ? `<h2 class="team-rows__heading">${escapeHtml(content.heading)}</h2>`

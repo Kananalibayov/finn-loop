@@ -113,7 +113,12 @@ test("tokensToCss preserves the declared property order", () => {
 
 test("renderHtml returns the shared stylesheet and theme data", () => {
   const result = renderHtml(modelWithPages());
-  assert.equal(result.stylesheet, tokensToCss(tokens));
+  // Since #206 the stylesheet is a composition: tokens block, then the base
+  // layer, then the css of the variants the site actually uses. The tokens
+  // block is still the deterministic prefix.
+  assert.ok(result.stylesheet.startsWith(tokensToCss(tokens)));
+  assert.ok(result.stylesheet.includes("box-sizing: border-box"));
+  assert.ok(result.stylesheet.includes(".hero-split__content"));
   assert.deepEqual(result.themeJson, themeJson(tokens));
 });
 

@@ -28,6 +28,7 @@ function tokenAttributes(ctx: RenderContext): string {
 export const ctaBanner: SectionRenderer<CtaContent> = {
   type: "cta",
   variant: "banner",
+  css: "",
   html(content, ctx) {
     const subheading = content.subheading
       ? `<p class="cta-banner__subheading">${escapeHtml(content.subheading)}</p>`

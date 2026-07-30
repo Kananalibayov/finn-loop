@@ -1,7 +1,8 @@
 import type { Page, SiteModel } from "../site-model.ts";
 import { isSiteModel } from "../site-model.ts";
-import { getRenderer, sectionInstanceId } from "../sections/registry.ts";
+import { collectCss, getRenderer, sectionInstanceId } from "../sections/registry.ts";
 import { escapeHtml, safeHref } from "../sections/types.ts";
+import { BASE_CSS } from "./base-css.ts";
 import { themeJson } from "./theme-json.ts";
 import { tokensToCss } from "./tokens-css.ts";
 
@@ -40,8 +41,12 @@ export function renderHtml(model: SiteModel): RenderedSite {
     throw new TypeError("Invalid SiteModel: model does not match the required shape");
   }
 
+  const used = model.pages.flatMap((page) =>
+    page.sections.map((section) => ({ type: section.type, variant: section.variant })),
+  );
+
   return {
-    stylesheet: tokensToCss(model.brand.tokens),
+    stylesheet: `${tokensToCss(model.brand.tokens)}\n${BASE_CSS}\n${collectCss(used)}`,
     themeJson: themeJson(model.brand.tokens),
     pages: model.pages.map((page) => ({ slug: page.slug, html: renderPage(page, model) })),
   };
