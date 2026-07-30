@@ -39,7 +39,8 @@ test("plan accepts a valid mocked site plan", async () => {
 
 test("plan rejects an unregistered section variant", async () => {
   const { plan } = await import("./plan.ts");
-  await withMock({ ...validPlan, pages: [{ ...validPlan.pages[0], sections: [{ type: "services", variant: "grid" }] }] },
+  // "nope" is a never-registered variant: this premise survives future section registrations (#204).
+  await withMock({ ...validPlan, pages: [{ ...validPlan.pages[0], sections: [{ type: "services", variant: "nope" }] }] },
     async () => await assert.rejects(() => plan(input), /invalid|unrenderable/i));
 });
 
