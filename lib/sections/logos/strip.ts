@@ -37,7 +37,24 @@ function renderLogo(image: LogosContent["images"][number], className: string): s
 export const logosStrip: SectionRenderer<LogosContent> = {
   type: "logos",
   variant: "strip",
-  css: "",
+  css: `
+.logos-strip { container-type: inline-size; }
+.logos-strip__list {
+  list-style: none;
+  padding-inline-start: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-4);
+}
+.logos-strip__logo {
+  block-size: var(--space-5);
+  inline-size: auto;
+  max-inline-size: 100%;
+  object-fit: contain;
+}
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const list =

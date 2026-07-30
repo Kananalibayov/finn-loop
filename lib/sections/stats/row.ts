@@ -17,7 +17,29 @@ function tokenAttributes(ctx: RenderContext): string {
 export const statsRow: SectionRenderer<StatsContent> = {
   type: "stats",
   variant: "row",
-  css: "",
+  css: `
+.stats-row { container-type: inline-size; }
+.stats-row__items {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-4);
+}
+.stats-row__item { text-align: center; }
+.stats-row__item > * + * { margin-block-start: var(--space-1); }
+@container (min-width: 40rem) {
+  .stats-row__items > * + * {
+    border-inline-start: 1px solid var(--color-border);
+    padding-inline-start: var(--space-4);
+  }
+}
+.stats-row__value {
+  font-family: var(--font-heading);
+  font-size: var(--step-2);
+  font-weight: 700;
+}
+.stats-row__label { color: var(--color-muted); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const items = content.items.length === 0 ? "" : `<dl class="stats-row__items">${content.items.map((item) => `<div class="stats-row__item"><dt class="stats-row__value">${escapeHtml(item.value)}</dt><dd class="stats-row__label">${escapeHtml(item.label)}</dd></div>`).join("")}</dl>`;

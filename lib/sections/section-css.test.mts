@@ -5,8 +5,8 @@ import type { DesignTokens, SectionType, SiteModel } from "../site-model.ts";
 import { validateSite } from "../validate/validate.ts";
 import { getRenderer } from "./registry.ts";
 
-// Issues #216 (batch 1) and #219 (batch 2): the twelve variants styled so far,
-// with the root class each block must stay inside.
+// Issues #216 (batch 1), #219 (batch 2) and #221 (batch 3): the variants styled
+// so far, with the root class each block must stay inside.
 const STYLED: Array<{ type: SectionType; variant: string; root: string }> = [
   { type: "services", variant: "grid", root: ".services-grid" },
   { type: "services", variant: "list", root: ".services-list" },
@@ -20,6 +20,12 @@ const STYLED: Array<{ type: SectionType; variant: string; root: string }> = [
   { type: "steps", variant: "timeline", root: ".steps-timeline" },
   { type: "gallery", variant: "grid", root: ".gallery-grid" },
   { type: "gallery", variant: "columns", root: ".gallery-columns" },
+  { type: "pricing", variant: "cards", root: ".pricing-cards" },
+  { type: "pricing", variant: "table", root: ".pricing-table" },
+  { type: "stats", variant: "grid", root: ".stats-grid" },
+  { type: "stats", variant: "row", root: ".stats-row" },
+  { type: "logos", variant: "grid", root: ".logos-grid" },
+  { type: "logos", variant: "strip", root: ".logos-strip" },
 ];
 
 for (const { type, variant, root } of STYLED) {
@@ -56,17 +62,17 @@ const tokens: DesignTokens = {
   typeScale: "1.25", spacingUnit: "8px", radius: "6px", shadow: "0 1px 3px #0002", containerMax: "1100px",
 };
 
-test("a site using all twelve styled variants renders and passes every quality gate", () => {
+test("a site using all eighteen styled variants renders and passes every quality gate", () => {
   const model: SiteModel = {
     version: 1,
     brand: { tokens, voice: { tone: "clear" } },
-    meta: { businessName: "Batch Two", contact: {}, hours: [], social: {}, locations: [] },
+    meta: { businessName: "Batch Three", contact: {}, hours: [], social: {}, locations: [] },
     nav: [{ label: "About", href: "/about" }],
     pages: [
       {
         slug: "home",
         title: "Home",
-        seo: { title: "Home — Batch Two", description: "Batch Two home page.", schema: [] },
+        seo: { title: "Home — Batch Three", description: "Batch Three home page.", schema: [] },
         sections: [
           { type: "hero", variant: "split", content: { heading: "Welcome" } },
           {
@@ -115,6 +121,29 @@ test("a site using all twelve styled variants renders and passes every quality g
             },
           },
           {
+            type: "pricing",
+            variant: "cards",
+            content: {
+              heading: "Plans",
+              plans: [
+                { name: "Starter", price: "$900", period: "one-off", features: ["One page", "Launch gates"], cta: { label: "Start", href: "/about" } },
+                { name: "Business", price: "$2,400", period: "one-off", features: ["Five pages", "Launch gates", "Care plan"], cta: { label: "Choose", href: "/about" } },
+              ],
+            },
+          },
+          {
+            type: "stats",
+            variant: "grid",
+            content: {
+              heading: "Numbers",
+              items: [
+                { value: "162", label: "Defects closed" },
+                { value: "8", label: "Blocking gates" },
+                { value: "100%", label: "Evidence rate" },
+              ],
+            },
+          },
+          {
             type: "gallery",
             variant: "grid",
             content: {
@@ -122,6 +151,17 @@ test("a site using all twelve styled variants renders and passes every quality g
               images: [
                 { kind: "stock", url: "/images/work-one.jpg", alt: "Bakery storefront site", width: 800, height: 600 },
                 { kind: "stock", url: "/images/work-two.jpg", alt: "Plumber landing page", width: 800, height: 600 },
+              ],
+            },
+          },
+          {
+            type: "logos",
+            variant: "grid",
+            content: {
+              heading: "Trusted by",
+              images: [
+                { kind: "stock", url: "/images/logo-one.svg", alt: "Northwind logo", width: 320, height: 120 },
+                { kind: "stock", url: "/images/logo-two.svg", alt: "Contoso logo", width: 320, height: 120 },
               ],
             },
           },
@@ -139,7 +179,7 @@ test("a site using all twelve styled variants renders and passes every quality g
       {
         slug: "about",
         title: "About",
-        seo: { title: "About — Batch Two", description: "About Batch Two.", schema: [] },
+        seo: { title: "About — Batch Three", description: "About Batch Three.", schema: [] },
         sections: [
           { type: "hero", variant: "centered", content: { heading: "About" } },
           {
@@ -183,6 +223,29 @@ test("a site using all twelve styled variants renders and passes every quality g
             },
           },
           {
+            type: "pricing",
+            variant: "table",
+            content: {
+              heading: "Compare plans",
+              plans: [
+                { name: "Starter", price: "$900", features: ["One page", "Launch gates"], cta: { label: "Start", href: "/" } },
+                { name: "Business", price: "$2,400", features: ["Launch gates", "Care plan"], cta: { label: "Choose", href: "/" } },
+              ],
+            },
+          },
+          {
+            type: "stats",
+            variant: "row",
+            content: {
+              heading: "At a glance",
+              items: [
+                { value: "14", label: "Section types" },
+                { value: "36", label: "Variants" },
+                { value: "0", label: "Merges by agents" },
+              ],
+            },
+          },
+          {
             type: "gallery",
             variant: "columns",
             content: {
@@ -191,6 +254,18 @@ test("a site using all twelve styled variants renders and passes every quality g
                 { kind: "stock", url: "/images/gallery-one.jpg", alt: "Cafe homepage hero", width: 800, height: 600 },
                 { kind: "stock", url: "/images/gallery-two.jpg", alt: "Gym pricing page", width: 800, height: 1000 },
                 { kind: "stock", url: "/images/gallery-three.jpg", alt: "Florist about page", width: 800, height: 500 },
+              ],
+            },
+          },
+          {
+            type: "logos",
+            variant: "strip",
+            content: {
+              heading: "Integrations",
+              images: [
+                { kind: "stock", url: "/images/logo-three.svg", alt: "Fabrikam logo", width: 320, height: 120 },
+                { kind: "stock", url: "/images/logo-four.svg", alt: "Adventure Works logo", width: 320, height: 120 },
+                { kind: "stock", url: "/images/logo-five.svg", alt: "Tailspin logo", width: 320, height: 120 },
               ],
             },
           },
@@ -218,6 +293,12 @@ test("a site using all twelve styled variants renders and passes every quality g
   assert.match(rendered.stylesheet, /\.steps-timeline__track/);
   assert.match(rendered.stylesheet, /\.gallery-grid__list/);
   assert.match(rendered.stylesheet, /\.gallery-columns__flow/);
+  assert.match(rendered.stylesheet, /\.pricing-cards__features/);
+  assert.match(rendered.stylesheet, /\.pricing-table__table/);
+  assert.match(rendered.stylesheet, /\.stats-grid__items/);
+  assert.match(rendered.stylesheet, /\.stats-row__items/);
+  assert.match(rendered.stylesheet, /\.logos-grid__list/);
+  assert.match(rendered.stylesheet, /\.logos-strip__list/);
   // And the rendered site passes the deterministic quality gates end to end.
   assert.deepEqual(validateSite(model, rendered), { ok: true, violations: [] });
 });

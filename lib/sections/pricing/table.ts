@@ -17,7 +17,43 @@ function tokenAttributes(ctx: RenderContext): string {
 export const pricingTable: SectionRenderer<PricingContent> = {
   type: "pricing",
   variant: "table",
-  css: "",
+  css: `
+.pricing-table { container-type: inline-size; }
+.pricing-table__table {
+  inline-size: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.pricing-table__table th,
+.pricing-table__table td {
+  padding: var(--space-2);
+  text-align: start;
+  border-block-end: 1px solid var(--color-border);
+}
+.pricing-table__table thead th {
+  background: var(--color-surface);
+  border-block-end: 2px solid var(--color-border);
+  font-family: var(--font-heading);
+}
+.pricing-table__table tbody th { font-weight: 600; }
+.pricing-table__table td { text-align: center; }
+.pricing-table__table tbody tr:first-child td {
+  font-size: var(--step-1);
+  font-weight: 700;
+}
+.pricing-table__period { color: var(--color-muted); font-size: var(--step-0); font-weight: 400; }
+.pricing-table__cta {
+  display: inline-block;
+  padding-block: var(--space-1);
+  padding-inline: var(--space-3);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: 600;
+}
+.pricing-table__cta:hover { background: var(--color-primary-hover); }
+`.trim(),
   html(content, ctx) {
     const heading = content.heading ? `<h2>${escapeHtml(content.heading)}</h2>` : "";
     const plans = content.plans;
